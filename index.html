@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sales Pacing Calendar Pro</title>
+  <meta name="description" content="Production-ready single-file sales pacing calendar with analytics, imports, and leaderboard (local/team JSON)." />
+  <style>
+    :root{
+      --bg0:#070812;
+      --bg1:#0b0e1e;
+      --card:rgba(255,255,255,.06);
+      --card2:rgba(255,255,255,.085);
+      --stroke:rgba(255,255,255,.10);
+      --stroke2:rgba(255,255,255,.14);
+      --text:#eef0ff;
+      --muted:#aab1ff;
+      --accent:#6cf2c2;
+      --accent2:#7fb6ff;
+      --warn:#ffcc66;
+      --bad:#ff6b6b;
+      --good:#6cf2c2;
+      --shadow:0 18px 55px rgba(0,0,0,.55);
+      --r12:12px;
+      --r16:16px;
+      --r20:20px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:var(--sans);
+      color:var(--text);
+      background:
+        radial-gradient(1200px 700px at 20% 10%, rgba(127,182,255,.18), transparent 55%),
+        radial-gradient(900px 600px at 90% 15%, rgba(108,242,194,.12), transparent 55%),
+        radial-gradient(900px 600px at 40% 110%, rgba(255,204,102,.08), transparent 60%),
+        linear-gradient(180deg,var(--bg0),var(--bg1));
+      overflow-x:hidden;
+    }
+    a{color:inherit}
+    .topbar{
+      position:sticky; top:0; z-index:50;
+      backdrop-filter: blur(14px);
+      background: rgba(7,8,18,.68);
+      border-bottom: 1px solid var(--stroke);
+    }
+    .topbar-inner{
+      max-width: 1220px; margin:0 auto;
+      padding: 14px 18px;
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px; min-width: 260px;
+    }
+    .logo{
+      width:38px;height:38px;border-radius:12px;
+      background: linear-gradient(135deg, rgba(127,182,255,.55), rgba(108,242,194,.55));
+      box-shadow: 0 10px 25px rgba(0,0,0,.35);
+      position:relative;
+    }
+    .logo:after{
+      content:"";
+      position:absolute; inset:10px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.30);
+      transform: rotate(12deg);
+    }
+    .brand h1{font-size:14px; margin:0; font-weight:700; letter-spacing:.3px}
+    .brand .sub{font-size:12px; color:var(--muted); margin-top:1px}
+    .nav{
+      display:flex; gap:8px; flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .tabbtn{
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.03);
+      color: var(--muted);
+      padding: 9px 12px;
+      border-radius: 999px;
+      cursor:pointer;
+      font-size: 13px;
+      transition: .18s ease;
+      display:flex; align-items:center; gap:8px;
+      user-select:none;
+    }
+    .tabbtn:hover{transform: translateY(-1px); border-color: var(--stroke2); color: var(--text)}
+    .tabbtn.active{background: rgba(108,242,194,.12); color: var(--text); border-color: rgba(108,242,194,.35)}
+    .pill{
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border:1px solid var(--stroke);
+      color: rgba(238,240,255,.9);
+      background: rgba(0,0,0,.18);
+    }
+    .container{max-width: 1220px; margin:0 auto; padding: 18px}
+    .grid{display:grid; gap:16px}
+    .grid.two{grid-template-columns: 1.15fr .85fr}
+    .grid.three{grid-template-columns: 1fr 1fr 1fr}
+    @media (max-width: 980px){ .grid.two{grid-template-columns:1fr} }
+    @media (max-width: 880px){ .grid.three{grid-template-columns:1fr} }
+    .card{
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--r20);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      position:relative;
+    }
+    .card .hdr{
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--stroke);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      background: rgba(255,255,255,.02);
+    }
+    .card .hdr .title{font-size: 13px; font-weight:700; letter-spacing:.25px}
+    .card .hdr .hint{font-size: 12px; color: var(--muted)}
+    .card .body{padding: 14px 16px}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+    .row.between{justify-content:space-between}
+    .btn{
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.03);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor:pointer;
+      font-weight:650;
+      font-size: 13px;
+      transition: .18s ease;
+      display:inline-flex; align-items:center; gap:8px;
+      user-select:none;
+    }
+    .btn:hover{transform: translateY(-1px); border-color: var(--stroke2)}
+    .btn.primary{background: linear-gradient(135deg, rgba(108,242,194,.92), rgba(127,182,255,.80)); color:#061014; border-color: rgba(255,255,255,.18)}
+    .btn.danger{background: rgba(255,107,107,.12); border-color: rgba(255,107,107,.35)}
+    .btn.ghost{background: transparent}
+    .btn.small{padding: 8px 10px; border-radius: 10px; font-size:12px}
+    .btn:disabled{opacity:.45; cursor:not-allowed; transform:none}
+    .field{display:flex; flex-direction:column; gap:6px; min-width:160px}
+    .field label{font-size:12px; color: var(--muted)}
+    input, select, textarea{
+      width:100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--stroke);
+      background: rgba(0,0,0,.25);
+      color: var(--text);
+      outline:none;
+    }
+    textarea{min-height: 140px; resize: vertical}
+    input:focus, select:focus, textarea:focus{border-color: rgba(127,182,255,.45)}
+    .kpis{display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px}
+    @media (max-width: 880px){ .kpis{grid-template-columns: repeat(2, 1fr)} }
+    .kpi{
+      background: var(--card2);
+      border: 1px solid var(--stroke);
+      border-radius: var(--r16);
+      padding: 12px;
+      position:relative;
+      overflow:hidden;
+    }
+    .kpi .lbl{font-size:12px; color:var(--muted)}
+    .kpi .val{font-size: 26px; font-weight: 800; margin-top:6px; letter-spacing:.2px}
+    .kpi .sub{font-size:12px; color: rgba(238,240,255,.82); margin-top:3px}
+    .kpi:before{
+      content:"";
+      position:absolute; inset:-2px;
+      background: radial-gradient(500px 120px at 15% 0%, rgba(108,242,194,.18), transparent 55%);
+      pointer-events:none;
+    }
+    .split{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 980px){ .split{grid-template-columns:1fr} }
+    .calendar-wrap{
+      padding: 12px;
+    }
+    .cal-top{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding: 10px 4px 12px;
+    }
+    .cal-top .month{
+      font-size: 16px; font-weight: 800; letter-spacing:.3px;
+      display:flex; align-items:center; gap:10px;
+    }
+    .cal-top .month span{color: var(--muted); font-weight:600; font-size: 12px}
+    .cal-grid{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+    }
+    .dow{font-size:11px; color: var(--muted); text-transform: uppercase; letter-spacing:.12em; padding: 2px 6px}
+    .day{
+      min-height: 98px;
+      border-radius: 16px;
+      border:1px solid var(--stroke);
+      background: rgba(0,0,0,.18);
+      overflow:hidden;
+      cursor:pointer;
+      position:relative;
+      transition: .15s ease;
+    }
+    .day:hover{transform: translateY(-1px); border-color: var(--stroke2)}
+    .day.muted{opacity:.35; cursor:default}
+    .day .dnum{position:absolute; top:10px; left:10px; font-weight:800; font-size:13px}
+    .day .tag{
+      position:absolute; top:10px; right:10px;
+      font-size:11px; padding:2px 8px; border-radius:999px;
+      border:1px solid var(--stroke);
+      background: rgba(0,0,0,.22);
+      color: rgba(238,240,255,.85);
+    }
+    .day .mini{
+      position:absolute; left:10px; right:10px; bottom:10px;
+      display:flex; justify-content:space-between; gap:8px; align-items:flex-end;
+    }
+    .mini .mval{font-family:var(--mono); font-size:11px; color: rgba(238,240,255,.88)}
+    .mini .bar{height:6px; flex:1; border-radius: 999px; border:1px solid var(--stroke); background: rgba(255,255,255,.06); overflow:hidden}
+    .mini .bar > i{display:block; height:100%; width: 0%; background: linear-gradient(90deg, rgba(108,242,194,.95), rgba(127,182,255,.95));}
+    .bgcar{
+      position:absolute; inset:0;
+      opacity: .18;
+      transform: translateY(4px);
+      pointer-events:none;
+    }
+    .bgcar svg{width:100%; height:100%}
+    .legend{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+      font-size:12px; color: var(--muted);
+    }
+    .dot{width:10px; height:10px; border-radius:50%}
+    .dot.g{background: var(--good)}
+    .dot.b{background: var(--accent2)}
+    .dot.w{background: var(--warn)}
+    .hr{height:1px; background: var(--stroke); margin: 12px 0}
+    .toast{
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 80;
+      max-width: 420px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke);
+      background: rgba(10,12,26,.86);
+      backdrop-filter: blur(12px);
+      box-shadow: var(--shadow);
+      display:none;
+    }
+    .toast .t{font-weight:800; font-size:13px}
+    .toast .m{font-size:12px; color: var(--muted); margin-top:4px; line-height:1.35}
+    /* modal */
+    .modal-back{
+      position: fixed; inset:0; z-index: 90;
+      background: rgba(0,0,0,.58);
+      display:none;
+      align-items:center; justify-content:center;
+      padding: 18px;
+    }
+    .modal{
+      width: min(860px, 100%);
+      border-radius: 18px;
+      border: 1px solid var(--stroke);
+      background: rgba(12,14,30,.92);
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .modal .mh{
+      padding: 14px 16px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      border-bottom: 1px solid var(--stroke);
+    }
+    .modal .mh .left{display:flex; flex-direction:column; gap:2px}
+    .modal .mh .left .h1{font-weight:900; font-size:14px}
+    .modal .mh .left .h2{font-size:12px; color: var(--muted)}
+    .modal .mb{padding: 14px 16px}
+    .modal .actions{display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap; padding: 12px 16px; border-top:1px solid var(--stroke)}
+    .small{font-size:12px; color: var(--muted); line-height:1.35}
+    .mono{font-family: var(--mono)}
+    .table{
+      width:100%;
+      border-collapse: collapse;
+      overflow:hidden;
+      border-radius: 14px;
+      border: 1px solid var(--stroke);
+      background: rgba(0,0,0,.18);
+    }
+    .table th, .table td{
+      padding: 10px 10px;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      font-size: 12px;
+      text-align:left;
+    }
+    .table th{color: var(--muted); font-weight:700; text-transform: uppercase; letter-spacing:.08em; font-size: 11px}
+    .badge{
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.04);
+      color: rgba(238,240,255,.88);
+      white-space:nowrap;
+    }
+    .badge.good{border-color: rgba(108,242,194,.35); background: rgba(108,242,194,.10)}
+    .badge.warn{border-color: rgba(255,204,102,.35); background: rgba(255,204,102,.10)}
+    .badge.bad{border-color: rgba(255,107,107,.35); background: rgba(255,107,107,.10)}
+    canvas{width:100%; height: 240px; background: rgba(0,0,0,.10); border:1px solid var(--stroke); border-radius: 16px}
+    .footer{
+      max-width: 1220px; margin: 0 auto;
+      padding: 10px 18px 24px;
+      display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+      color: rgba(238,240,255,.62); font-size:12px;
+    }
+    .kbd{font-family: var(--mono); border:1px solid var(--stroke); background: rgba(0,0,0,.22); padding:2px 6px; border-radius:8px; font-size:11px; color: rgba(238,240,255,.8)}
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>Sales Pacing Calendar Pro</h1>
+          <div class="sub">Single-file build • works on any work computer • <span class="pill" id="verPill">v1.0</span></div>
+        </div>
+      </div>
+
+      <div class="nav" role="tablist" aria-label="Primary">
+        <button class="tabbtn active" id="tabPacing" role="tab" aria-selected="true">🏁 My Pacing <span class="pill" id="pillMonth">—</span></button>
+        <button class="tabbtn" id="tabAnalytics" role="tab" aria-selected="false">📊 Analytics</button>
+        <button class="tabbtn" id="tabLeaderboard" role="tab" aria-selected="false">🏆 Leaderboard</button>
+        <button class="tabbtn" id="tabSettings" role="tab" aria-selected="false">⚙️ Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- PACING -->
+    <section id="viewPacing">
+      <div class="grid two">
+        <div class="card">
+          <div class="hdr">
+            <div>
+              <div class="title">Monthly calendar (click a day to fill)</div>
+              <div class="hint">Pace line updates as you enter daily numbers.</div>
+            </div>
+            <div class="row">
+              <button class="btn small" id="prevMonth">←</button>
+              <button class="btn small" id="nextMonth">→</button>
+              <button class="btn small" id="todayBtn">Today</button>
+            </div>
+          </div>
+          <div class="calendar-wrap">
+            <div class="cal-top">
+              <div class="month" id="monthTitle">— <span id="monthSubtitle"></span></div>
+              <div class="legend">
+                <span class="dot g"></span><span>On pace</span>
+                <span class="dot w"></span><span>Behind</span>
+                <span class="dot b"></span><span>Ahead</span>
+              </div>
+            </div>
+            <div class="cal-grid" id="dowRow"></div>
+            <div class="cal-grid" id="calGrid"></div>
+          </div>
+        </div>
+
+        <div class="grid" style="grid-auto-rows:min-content; gap:16px;">
+          <div class="card">
+            <div class="hdr">
+              <div>
+                <div class="title">Pacing KPIs</div>
+                <div class="hint">Goal + finish-strong multiplier supported.</div>
+              </div>
+              <button class="btn small" id="quickAddBtn">+ Quick Add Today</button>
+            </div>
+            <div class="body">
+              <div class="kpis">
+                <div class="kpi">
+                  <div class="lbl">Units (MTD)</div>
+                  <div class="val" id="kpiUnits">0.0</div>
+                  <div class="sub" id="kpiUnitsSub">Goal: 11.0</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl">Contacts (MTD)</div>
+                  <div class="val" id="kpiContacts">0</div>
+                  <div class="sub">Calls + Texts + Emails</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl">Pace vs Goal</div>
+                  <div class="val" id="kpiPace">0%</div>
+                  <div class="sub" id="kpiPaceSub">Day — of —</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl">Dealer Day Score</div>
+                  <div class="val" id="kpiScore">0</div>
+                  <div class="sub">Activity-weighted</div>
+                </div>
+              </div>
+              <div class="hr"></div>
+              <div class="split">
+                <div>
+                  <div class="row between">
+                    <div class="title" style="font-size:13px;">Pace vs Actual (units)</div>
+                    <div class="row">
+                      <span class="badge" id="badgeMode">Monthly mode</span>
+                      <button class="btn small ghost" id="resetMonthBtn">Reset month</button>
+                    </div>
+                  </div>
+                  <div style="margin-top:10px">
+                    <canvas id="paceChart" width="900" height="240"></canvas>
+                  </div>
+                </div>
+                <div>
+                  <div class="title" style="font-size:13px;">Today checklist</div>
+                  <div class="small" style="margin-top:6px">Targets adapt based on your settings + your 3‑month patterns (if you import them in Analytics).</div>
+                  <div class="hr"></div>
+                  <div id="checklist" class="small mono"></div>
+                  <div class="hr"></div>
+                  <div class="row">
+                    <button class="btn primary" id="openEntry">Fill today</button>
+                    <button class="btn" id="exportBtn">Export</button>
+                    <button class="btn" id="importBtn">Import</button>
+                  </div>
+                  <input type="file" id="importFile" accept=".json" style="display:none"/>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="hdr">
+              <div>
+                <div class="title">Car of the month</div>
+                <div class="hint">Cinematic background cycles daily (no external images required).</div>
+              </div>
+              <div class="row">
+                <span class="pill" id="carName">—</span>
+              </div>
+            </div>
+            <div class="body" style="padding:0">
+              <div id="hero" style="height:180px; position:relative; overflow:hidden;">
+                <div id="heroBg" style="position:absolute; inset:0;"></div>
+                <div style="position:absolute; inset:0; background:linear-gradient(180deg, transparent, rgba(7,8,18,.86));"></div>
+                <div style="position:absolute; left:16px; right:16px; bottom:14px;">
+                  <div style="font-weight:900; font-size:16px;" id="heroTitle">—</div>
+                  <div class="small" id="heroSub">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ANALYTICS -->
+    <section id="viewAnalytics" style="display:none">
+      <div class="grid two">
+        <div class="card">
+          <div class="hdr">
+            <div>
+              <div class="title">CRM intake (paste)</div>
+              <div class="hint">Paste funnel, communications, activity, or deal history. Click <span class="kbd">Analyze</span>.</div>
+            </div>
+            <div class="row">
+              <button class="btn small" id="analyzeBtn">Analyze</button>
+              <button class="btn small" id="applyBtn">Apply to pacing</button>
+              <button class="btn small ghost" id="clearPaste">Clear</button>
+            </div>
+          </div>
+          <div class="body">
+            <textarea id="crmPaste" placeholder="Paste CRM text here (widgets or deal blocks)."></textarea>
+            <div class="hr"></div>
+            <div class="small">
+              Disclaimer: metrics are estimated from pasted text and may be off if the export format changes. Always sanity‑check vs your CRM reports.
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hdr">
+            <div>
+              <div class="title">Computed metrics</div>
+              <div class="hint">Used to tune your daily pacing targets.</div>
+            </div>
+            <span class="pill" id="analyticsDetected">—</span>
+          </div>
+          <div class="body">
+            <div class="kpis">
+              <div class="kpi"><div class="lbl">Close rate</div><div class="val" id="mClose">—</div><div class="sub">Sold / leads</div></div>
+              <div class="kpi"><div class="lbl">Show rate</div><div class="val" id="mShow">—</div><div class="sub">Shown / scheduled</div></div>
+              <div class="kpi"><div class="lbl">Contacts / sale</div><div class="val" id="mCPS">—</div><div class="sub">Calls+texts+emails per unit</div></div>
+              <div class="kpi"><div class="lbl">Avg cycle (days)</div><div class="val" id="mCycle">—</div><div class="sub">From deal history</div></div>
+            </div>
+            <div class="hr"></div>
+            <div class="split">
+              <div>
+                <div class="title" style="font-size:13px;">What this changes</div>
+                <div class="small" id="impactText" style="margin-top:6px">Analyze your CRM paste to unlock tuning.</div>
+              </div>
+              <div>
+                <div class="title" style="font-size:13px;">Benchmark vs industry</div>
+                <div class="small" id="benchText" style="margin-top:6px">Set your industry benchmarks in Settings.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEADERBOARD -->
+    <section id="viewLeaderboard" style="display:none">
+      <div class="grid two">
+        <div class="card">
+          <div class="hdr">
+            <div>
+              <div class="title">Leaderboard (team JSON)</div>
+              <div class="hint">Share a team JSON file to combine reps. No server required.</div>
+            </div>
+            <div class="row">
+              <button class="btn small" id="lbAddMe">Add/Update me</button>
+              <button class="btn small" id="lbExport">Export team</button>
+              <button class="btn small" id="lbImport">Import team</button>
+              <input type="file" id="lbFile" accept=".json" style="display:none"/>
+            </div>
+          </div>
+          <div class="body">
+            <div class="row">
+              <div class="field" style="min-width:220px">
+                <label>Your name (for leaderboard)</label>
+                <input id="meName" placeholder="Cash McCombs" />
+              </div>
+              <div class="field" style="min-width:220px">
+                <label>Team month key</label>
+                <input id="teamMonth" class="mono" placeholder="2026-02" />
+              </div>
+              <div class="field" style="min-width:220px">
+                <label>Notes (optional)</label>
+                <input id="meNote" placeholder="e.g., Internet / Trade-in focus" />
+              </div>
+            </div>
+            <div class="hr"></div>
+            <div class="small">No server version: reps export the team JSON and a manager merges by importing + re-exporting.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hdr">
+            <div>
+              <div class="title">Rankings</div>
+              <div class="hint">Sorted by Dealer Day Score, then units.</div>
+            </div>
+            <span class="pill" id="lbCount">0 reps</span>
+          </div>
+          <div class="body">
+            <table class="table" id="lbTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Units</th>
+                  <th>Contacts</th>
+                  <th>Appts</th>
+                  <th>Score</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="viewSettings" style="display:none">
+      <div class="grid two">
+        <div class="card">
+          <div class="hdr">
+            <div>
+              <div class="title">Targets & pacing</div>
+              <div class="hint">Drives checklist + pace calculations.</div>
+            </div>
+            <button class="btn small primary" id="saveSettings">Save</button>
+          </div>
+          <div class="body">
+            <div class="grid three">
+              <div class="field">
+                <label>Monthly unit goal</label>
+                <input id="setGoal" type="number" step="0.5" value="11" />
+              </div>
+              <div class="field">
+                <label>Finish-strong window (days)</label>
+                <input id="setFinishDays" type="number" value="7" />
+              </div>
+              <div class="field">
+                <label>Finish-strong multiplier</label>
+                <input id="setFinishMult" type="number" step="0.01" value="1.15" />
+              </div>
+              <div class="field">
+                <label>Daily calls target</label>
+                <input id="setCalls" type="number" value="40" />
+              </div>
+              <div class="field">
+                <label>Daily contacts target</label>
+                <input id="setContacts" type="number" value="80" />
+              </div>
+              <div class="field">
+                <label>Daily appts target</label>
+                <input id="setAppts" type="number" value="2" />
+              </div>
+            </div>
+            <div class="hr"></div>
+            <div class="row between">
+              <div>
+                <div class="title" style="font-size:13px;">Weekly target mode</div>
+                <div class="small">Shows weekly target + last-week sprint behavior.</div>
+              </div>
+              <div class="row">
+                <label class="small" style="display:flex; align-items:center; gap:10px;">
+                  <input id="setWeeklyMode" type="checkbox" checked style="width:auto"/>
+                  Enable weekly mode
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hdr">
+            <div>
+              <div class="title">Industry benchmarks</div>
+              <div class="hint">Used in Analytics benchmark view.</div>
+            </div>
+          </div>
+          <div class="body">
+            <div class="grid three">
+              <div class="field">
+                <label>Industry close rate (0–1)</label>
+                <input id="setIndClose" type="number" step="0.01" value="0.12" />
+              </div>
+              <div class="field">
+                <label>Industry contacts / sale</label>
+                <input id="setIndCPS" type="number" value="85" />
+              </div>
+              <div class="field">
+                <label>Industry show rate (0–1)</label>
+                <input id="setIndShow" type="number" step="0.01" value="0.35" />
+              </div>
+            </div>
+            <div class="hr"></div>
+            <div class="row between">
+              <div>
+                <div class="title" style="font-size:13px;">Data safety</div>
+                <div class="small">All data stays in your browser unless you export JSON.</div>
+              </div>
+              <button class="btn danger small" id="nukeBtn">Factory reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="footer">
+    <div>© 2026 • Local-first (no server) • Built for dealership pacing</div>
+    <div class="mono">Tip: press <span class="kbd">Ctrl</span> + <span class="kbd">F</span> to find fields fast.</div>
+  </div>
+
+  <div class="toast" id="toast">
+    <div class="t" id="toastT">—</div>
+    <div class="m" id="toastM">—</div>
+  </div>
+
+  <div class="modal-back" id="modalBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Daily entry">
+      <div class="mh">
+        <div class="left">
+          <div class="h1" id="modalTitle">Daily entry</div>
+          <div class="h2" id="modalSub">—</div>
+        </div>
+        <button class="btn small ghost" id="closeModal">✕</button>
+      </div>
+      <div class="mb">
+        <div class="grid three">
+          <div class="field"><label>Units (weighted)</label><input id="eUnits" type="number" step="0.5" /></div>
+          <div class="field"><label>Calls</label><input id="eCalls" type="number" /></div>
+          <div class="field"><label>Texts</label><input id="eTexts" type="number" /></div>
+          <div class="field"><label>Emails</label><input id="eEmails" type="number" /></div>
+          <div class="field"><label>Appointments</label><input id="eAppts" type="number" /></div>
+          <div class="field"><label>Notes</label><input id="eNotes" placeholder="quick note (optional)" /></div>
+        </div>
+        <div class="hr"></div>
+        <div class="small">Dealer Day Score computes automatically (finish-strong included).</div>
+      </div>
+      <div class="actions">
+        <button class="btn danger" id="deleteDay">Delete day</button>
+        <button class="btn" id="saveDay">Save</button>
+        <button class="btn primary" id="saveClose">Save & Close</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const fmt1 = (n) => (Math.round(n*10)/10).toFixed(1);
+  const pct = (x) => x==null || !isFinite(x) ? "—" : Math.round(x*100) + "%";
+  const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const iso = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const da = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${da}`;
+  };
+  const monthKey = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    return `${y}-${m}`;
+  };
+
+  const defaultState = () => ({
+    version: "1.0",
+    settings: {
+      goalUnits: 11.0,
+      finishDays: 7,
+      finishMult: 1.15,
+      dailyCalls: 40,
+      dailyContacts: 80,
+      dailyAppts: 2,
+      weeklyMode: true,
+      indClose: 0.12,
+      indCPS: 85,
+      indShow: 0.35
+    },
+    analytics: {
+      detected: null,
+      close: null,
+      show: null,
+      cps: null,
+      cycle: null,
+      contacts: null,
+      appliedAt: null
+    },
+    months: {},
+    leaderboard: {}
+  });
+
+  const storageKey = "salespace_pro_v1";
+  let S = null;
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if(!raw) return defaultState();
+      const parsed = JSON.parse(raw);
+      return Object.assign(defaultState(), parsed);
+    } catch(e) {
+      return defaultState();
+    }
+  }
+  function save() {
+    localStorage.setItem(storageKey, JSON.stringify(S));
+  }
+
+  function toast(title, msg, ms=2400) {
+    $("toastT").textContent = title;
+    $("toastM").textContent = msg;
+    const t = $("toast");
+    t.style.display = "block";
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=>{ t.style.display="none"; }, ms);
+  }
+
+  const cars = [
+    {
+      name:"Huracán EVO",
+      title:"Drive the Month Like a Supercar",
+      sub:"Small wins daily. Stack reps, stack deals.",
+      bg:`radial-gradient(900px 260px at 15% 25%, rgba(127,182,255,.35), transparent 55%),
+          radial-gradient(900px 260px at 85% 15%, rgba(108,242,194,.25), transparent 55%),
+          linear-gradient(135deg, rgba(0,0,0,.25), rgba(0,0,0,.75))`
+    },
+    {
+      name:"911 Turbo S",
+      title:"Precision > Motivation",
+      sub:"Run the checklist. Trust the numbers.",
+      bg:`radial-gradient(900px 260px at 25% 10%, rgba(255,204,102,.22), transparent 55%),
+          radial-gradient(900px 260px at 85% 25%, rgba(127,182,255,.25), transparent 55%),
+          linear-gradient(135deg, rgba(0,0,0,.20), rgba(0,0,0,.80))`
+    },
+    {
+      name:"GT‑R NISMO",
+      title:"Finish Strong Mode",
+      sub:"Late-month multiplier + ruthless follow-up.",
+      bg:`radial-gradient(900px 260px at 15% 15%, rgba(255,107,107,.18), transparent 55%),
+          radial-gradient(900px 260px at 85% 20%, rgba(108,242,194,.20), transparent 55%),
+          linear-gradient(135deg, rgba(0,0,0,.22), rgba(0,0,0,.82))`
+    },
+    {
+      name:"McLaren 720S",
+      title:"Your Pace Is Your Power",
+      sub:"Lead → contact → appointment → show → sold.",
+      bg:`radial-gradient(900px 260px at 18% 25%, rgba(108,242,194,.25), transparent 55%),
+          radial-gradient(900px 260px at 82% 10%, rgba(127,182,255,.20), transparent 55%),
+          linear-gradient(135deg, rgba(0,0,0,.22), rgba(0,0,0,.82))`
+    }
+  ];
+  function carSilhouetteSVG() {
+    return `
+      <svg viewBox="0 0 1200 350" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="rgba(127,182,255,.35)"/>
+            <stop offset="1" stop-color="rgba(108,242,194,.35)"/>
+          </linearGradient>
+        </defs>
+        <path d="M140 240
+                 C 210 200, 290 160, 380 145
+                 C 460 110, 560 85, 680 95
+                 C 790 110, 880 140, 980 170
+                 C 1040 190, 1090 200, 1140 205
+                 L 1140 245
+                 C 1010 270, 850 285, 680 290
+                 C 510 295, 330 285, 165 270
+                 C 145 268, 140 260, 140 240 Z"
+              fill="url(#g)" opacity=".9"/>
+        <circle cx="320" cy="270" r="44" fill="rgba(0,0,0,.35)"/>
+        <circle cx="880" cy="270" r="44" fill="rgba(0,0,0,.35)"/>
+        <circle cx="320" cy="270" r="30" fill="rgba(255,255,255,.10)"/>
+        <circle cx="880" cy="270" r="30" fill="rgba(255,255,255,.10)"/>
+      </svg>
+    `;
+  }
+
+  S = load();
+  $("verPill").textContent = "v" + (S.version || "1.0");
+  let cursor = new Date();
+  let selectedISO = null;
+
+  function ensureMonth(mk) {
+    if(!S.months[mk]) S.months[mk] = { days: {} };
+    return S.months[mk];
+  }
+
+  function setActive(tab) {
+    ["tabPacing","tabAnalytics","tabLeaderboard","tabSettings"].forEach(id=>{
+      $(id).classList.toggle("active", id === tab);
+      $(id).setAttribute("aria-selected", id === tab ? "true" : "false");
+    });
+    $("viewPacing").style.display = tab==="tabPacing" ? "block" : "none";
+    $("viewAnalytics").style.display = tab==="tabAnalytics" ? "block" : "none";
+    $("viewLeaderboard").style.display = tab==="tabLeaderboard" ? "block" : "none";
+    $("viewSettings").style.display = tab==="tabSettings" ? "block" : "none";
+  }
+  $("tabPacing").onclick = () => setActive("tabPacing");
+  $("tabAnalytics").onclick = () => setActive("tabAnalytics");
+  $("tabLeaderboard").onclick = () => { setActive("tabLeaderboard"); renderLeaderboard(); };
+  $("tabSettings").onclick = () => { setActive("tabSettings"); renderSettings(); };
+
+  function renderDow() {
+    const row = $("dowRow");
+    if(row.childElementCount) return;
+    for(const d of dow){
+      const el = document.createElement("div");
+      el.className = "dow";
+      el.textContent = d;
+      row.appendChild(el);
+    }
+  }
+
+  function daysInMonth(y,m) {
+    return new Date(y, m+1, 0).getDate();
+  }
+
+  function getDayData(dateISO) {
+    const mk = dateISO.slice(0,7);
+    const mo = ensureMonth(mk);
+    return mo.days[dateISO] || null;
+  }
+
+  function computeScoreForDate(dateISO, v) {
+    const units = +v.units||0;
+    const calls = +v.calls||0;
+    const texts = +v.texts||0;
+    const emails = +v.emails||0;
+    const appts = +v.appts||0;
+    const contacts = calls+texts+emails;
+
+    const y = +dateISO.slice(0,4);
+    const m = +dateISO.slice(5,7)-1;
+    const d = +dateISO.slice(8,10);
+    const dim = daysInMonth(y,m);
+    const remaining = dim - d + 1;
+    const inFinish = remaining <= (S.settings.finishDays||7);
+    let base = (units*100) + (contacts*0.25) + (appts*10);
+    if(inFinish) base *= (S.settings.finishMult||1.15);
+    return Math.round(base);
+  }
+
+  function sumMonth(mk) {
+    const mo = ensureMonth(mk);
+    let units=0,calls=0,texts=0,emails=0,appts=0,score=0;
+    for(const [k,v] of Object.entries(mo.days)) {
+      units += +v.units||0;
+      calls += +v.calls||0;
+      texts += +v.texts||0;
+      emails += +v.emails||0;
+      appts += +v.appts||0;
+      score += computeScoreForDate(k, v);
+    }
+    const contacts = calls+texts+emails;
+    return {units,calls,texts,emails,appts,contacts,score};
+  }
+
+  function paceTargetByDay(dayIndex, dim) {
+    const goal = +S.settings.goalUnits || 11.0;
+    const raw = goal * (dayIndex/dim);
+    return Math.round(raw*2)/2;
+  }
+
+  function dayCell(date, isMuted) {
+    const dISO = iso(date);
+    const data = getDayData(dISO);
+    const y = date.getFullYear();
+    const m = date.getMonth();
+    const dim = daysInMonth(y,m);
+
+    const el = document.createElement("div");
+    el.className = "day" + (isMuted ? " muted" : "");
+    el.setAttribute("data-iso", dISO);
+
+    const dn = document.createElement("div");
+    dn.className = "dnum";
+    dn.textContent = date.getDate();
+    el.appendChild(dn);
+
+    if(!isMuted) {
+      const tag = document.createElement("div");
+      tag.className = "tag mono";
+      tag.textContent = paceTargetByDay(date.getDate(), dim).toFixed(1);
+      el.appendChild(tag);
+    }
+
+    const bg = document.createElement("div");
+    bg.className = "bgcar";
+    bg.innerHTML = carSilhouetteSVG();
+    el.appendChild(bg);
+
+    const mini = document.createElement("div");
+    mini.className = "mini";
+    const val = document.createElement("div");
+    val.className = "mval";
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const i = document.createElement("i");
+    bar.appendChild(i);
+    mini.appendChild(val);
+    mini.appendChild(bar);
+    el.appendChild(mini);
+
+    if(data) {
+      const u = +data.units||0;
+      val.textContent = (u?fmt1(u):"—") + " u";
+      const target = paceTargetByDay(date.getDate(), dim);
+      const pctv = target>0 ? clamp(u/target, 0, 1.35) : 0;
+      i.style.width = (pctv*100) + "%";
+      if(u >= target + 0.5) el.style.borderColor = "rgba(127,182,255,.45)";
+      else if(u >= target - 0.01) el.style.borderColor = "rgba(108,242,194,.42)";
+      else el.style.borderColor = "rgba(255,204,102,.38)";
+    } else {
+      val.textContent = "—";
+      i.style.width = "0%";
+    }
+
+    if(!isMuted) el.addEventListener("click", () => openDay(dISO));
+    return el;
+  }
+
+  function renderCalendar() {
+    renderDow();
+    const y = cursor.getFullYear();
+    const m = cursor.getMonth();
+    const first = new Date(y,m,1);
+    const startDow = first.getDay();
+    const dim = daysInMonth(y,m);
+    const mk = monthKey(first);
+    $("pillMonth").textContent = mk;
+    $("monthTitle").textContent = `${monthNames[m]} ${y}`;
+    const today = new Date();
+    $("monthSubtitle").textContent = (mk === monthKey(today)) ? "Current month" : "Browse";
+    const grid = $("calGrid");
+    grid.innerHTML = "";
+
+    const prev = new Date(y,m,0);
+    const prevDim = prev.getDate();
+    for(let i=0;i<startDow;i++) {
+      const dnum = prevDim - (startDow-1-i);
+      const date = new Date(y,m-1,dnum);
+      grid.appendChild(dayCell(date, true));
+    }
+    for(let d=1; d<=dim; d++) {
+      const date = new Date(y,m,d);
+      grid.appendChild(dayCell(date, false));
+    }
+    const total = startDow + dim;
+    const pad = (total <= 35) ? (35-total) : (42-total);
+    for(let i=1;i<=pad;i++) {
+      const date = new Date(y,m+1,i);
+      grid.appendChild(dayCell(date, true));
+    }
+
+    renderKPIs();
+    renderChart();
+    renderHero();
+  }
+
+  function openDay(dISO) {
+    selectedISO = dISO;
+    const d = new Date(+dISO.slice(0,4), +dISO.slice(5,7)-1, +dISO.slice(8,10));
+    $("modalTitle").textContent = "Daily entry • " + dISO;
+    $("modalSub").textContent = `${dow[d.getDay()]} • Target: ${paceTargetByDay(d.getDate(), daysInMonth(d.getFullYear(), d.getMonth())).toFixed(1)} units`;
+    const data = getDayData(dISO) || {};
+    $("eUnits").value = (data.units ?? "");
+    $("eCalls").value = (data.calls ?? "");
+    $("eTexts").value = (data.texts ?? "");
+    $("eEmails").value = (data.emails ?? "");
+    $("eAppts").value = (data.appts ?? "");
+    $("eNotes").value = (data.notes ?? "");
+    $("modalBack").style.display = "flex";
+  }
+  function closeDay() { $("modalBack").style.display = "none"; }
+  $("closeModal").onclick = closeDay;
+  $("modalBack").addEventListener("click", (e)=>{ if(e.target === $("modalBack")) closeDay(); });
+
+  function num(v) { const x = parseFloat(v); return isFinite(x) ? x : 0; }
+  function int(v) { const x = parseInt(v,10); return isFinite(x) ? x : 0; }
+
+  function saveSelected(closeAfter=false) {
+    if(!selectedISO) return;
+    const mk = selectedISO.slice(0,7);
+    const mo = ensureMonth(mk);
+    mo.days[selectedISO] = {
+      units: num($("eUnits").value),
+      calls: int($("eCalls").value),
+      texts: int($("eTexts").value),
+      emails: int($("eEmails").value),
+      appts: int($("eAppts").value),
+      notes: ($("eNotes").value||"").trim()
+    };
+    save();
+    renderCalendar();
+    toast("Saved", `${selectedISO} updated.`);
+    if(closeAfter) closeDay();
+  }
+  function deleteSelected() {
+    if(!selectedISO) return;
+    const mk = selectedISO.slice(0,7);
+    const mo = ensureMonth(mk);
+    delete mo.days[selectedISO];
+    save();
+    renderCalendar();
+    toast("Deleted", `${selectedISO} cleared.`);
+    closeDay();
+  }
+  $("saveDay").onclick = ()=>saveSelected(false);
+  $("saveClose").onclick = ()=>saveSelected(true);
+  $("deleteDay").onclick = deleteSelected;
+
+  $("quickAddBtn").onclick = ()=> openDay(iso(new Date()));
+  $("openEntry").onclick = ()=> openDay(iso(new Date()));
+
+  $("prevMonth").onclick = ()=>{ cursor = new Date(cursor.getFullYear(), cursor.getMonth()-1, 1); renderCalendar(); };
+  $("nextMonth").onclick = ()=>{ cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1); renderCalendar(); };
+  $("todayBtn").onclick = ()=>{ cursor = new Date(); renderCalendar(); };
+
+  $("resetMonthBtn").onclick = ()=>{
+    const mk = monthKey(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
+    if(confirm(`Reset all entries for ${mk}?`)) {
+      S.months[mk] = { days: {} };
+      save();
+      renderCalendar();
+      toast("Reset", `${mk} cleared.`);
+    }
+  };
+
+  function renderKPIs() {
+    const mk = monthKey(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
+    const msum = sumMonth(mk);
+    $("kpiUnits").textContent = fmt1(msum.units);
+    $("kpiContacts").textContent = String(msum.contacts);
+    $("kpiScore").textContent = String(msum.score);
+
+    const today = new Date();
+    const isCurrent = mk === monthKey(today);
+    const dayNum = isCurrent ? today.getDate() : 1;
+    const dim = daysInMonth(cursor.getFullYear(), cursor.getMonth());
+    $("kpiPaceSub").textContent = `Day ${isCurrent?dayNum:"—"} of ${dim}`;
+
+    const goal = +S.settings.goalUnits || 11;
+    $("kpiUnitsSub").textContent = `Goal: ${goal.toFixed(1)}`;
+    const pacePct = goal>0 ? clamp(msum.units/goal, 0, 9) : 0;
+    $("kpiPace").textContent = Math.round(pacePct*100) + "%";
+
+    renderChecklist(msum, mk);
+  }
+
+  function renderChecklist(msum, mk) {
+    const set = S.settings;
+    const dim = daysInMonth(cursor.getFullYear(), cursor.getMonth());
+    const today = new Date();
+    const isCurrent = mk === monthKey(today);
+    const dayNum = isCurrent ? today.getDate() : 1;
+
+    const dailyCalls = +set.dailyCalls||40;
+    const dailyContacts = +set.dailyContacts||80;
+    const dailyAppts = +set.dailyAppts||2;
+
+    const goal = +set.goalUnits||11;
+    const paceToday = paceTargetByDay(dayNum, dim);
+    const behindUnits = Math.max(0, paceToday - msum.units);
+    const remainingDays = Math.max(0, dim - dayNum + 1);
+    const neededPerDay = remainingDays>0 ? (Math.max(0, goal - msum.units) / remainingDays) : 0;
+
+    const indCPS = +set.indCPS||85;
+    const cps = (S.analytics.cps && isFinite(S.analytics.cps)) ? S.analytics.cps : indCPS;
+    const contactsNeeded = Math.ceil(Math.max(0, goal - msum.units) * cps);
+    const contactsPerDayNeeded = remainingDays>0 ? Math.ceil(contactsNeeded/remainingDays) : 0;
+
+    const lines = [];
+    lines.push(`Month goal: ${goal.toFixed(1)} units`);
+    lines.push(`You are: ${fmt1(msum.units)} units MTD (pace target today: ${paceToday.toFixed(1)})`);
+    lines.push(`Gap: ${behindUnits>0 ? (fmt1(behindUnits)+" behind") : "on/above pace"}`);
+    lines.push(`Needed to finish: ~${neededPerDay.toFixed(2)} units/day (next ${remainingDays} days)`);
+    lines.push("");
+    lines.push(`Today targets: calls ≥ ${dailyCalls}, contacts ≥ ${dailyContacts}, appts ≥ ${dailyAppts}`);
+    if(contactsPerDayNeeded>0) lines.push(`To hit goal at ~${cps} contacts/sale: aim ~${contactsPerDayNeeded} contacts/day`);
+    lines.push("");
+    if(set.weeklyMode) {
+      const weeks = Math.ceil(dim/7);
+      const weeklyGoal = goal/weeks;
+      const daysLeft = remainingDays;
+      const lastWeek = daysLeft <= 7;
+      lines.push(`Weekly target mode: ~${weeklyGoal.toFixed(2)} units/week` + (lastWeek ? " (FINISH STRONG WEEK)" : ""));
+    }
+
+    $("checklist").textContent = lines.join("\n");
+  }
+
+  function renderChart() {
+    const c = $("paceChart");
+    const ctx = c.getContext("2d");
+    const mk = monthKey(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
+    const y = cursor.getFullYear(), m = cursor.getMonth();
+    const dim = daysInMonth(y,m);
+    const mo = ensureMonth(mk);
+    const goal = +S.settings.goalUnits||11;
+
+    const actual = new Array(dim).fill(0);
+    for(let d=1; d<=dim; d++) {
+      const dISO = `${mk}-${String(d).padStart(2,"0")}`;
+      const v = mo.days[dISO];
+      actual[d-1] = (v && isFinite(+v.units)) ? +v.units : 0;
+    }
+    const cumActual = actual.map((v,i)=> actual.slice(0,i+1).reduce((a,b)=>a+b,0));
+    const pace = new Array(dim).fill(0).map((_,i)=> paceTargetByDay(i+1, dim));
+
+    const W = c.width, H = c.height;
+    ctx.clearRect(0,0,W,H);
+
+    ctx.strokeStyle = "rgba(255,255,255,.10)";
+    ctx.lineWidth = 1;
+    for(let i=0;i<=4;i++) {
+      const yy = 18 + i*(H-36)/4;
+      ctx.beginPath(); ctx.moveTo(12,yy); ctx.lineTo(W-12,yy); ctx.stroke();
+    }
+
+    const maxY = Math.max(goal, Math.max(...cumActual), 1);
+    const padL=42, padR=14, padT=16, padB=22;
+    const x = (i)=> padL + (i/(dim-1))*(W-padL-padR);
+    const yv = (v)=> (H-padB) - (v/maxY)*(H-padT-padB);
+
+    ctx.fillStyle="rgba(238,240,255,.70)";
+    ctx.font="12px " + getComputedStyle(document.body).fontFamily;
+    ctx.fillText("0", 14, H-18);
+    ctx.fillText(String(Math.round(maxY)), 10, 20);
+
+    ctx.strokeStyle = "rgba(127,182,255,.90)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for(let i=0;i<dim;i++) {
+      const vx = x(i);
+      const vy = yv(pace[i]);
+      if(i===0) ctx.moveTo(vx,vy); else ctx.lineTo(vx,vy);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(108,242,194,.95)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for(let i=0;i<dim;i++) {
+      const vx = x(i);
+      const vy = yv(cumActual[i]);
+      if(i===0) ctx.moveTo(vx,vy); else ctx.lineTo(vx,vy);
+    }
+    ctx.stroke();
+
+    const today = new Date();
+    if(mk === monthKey(today)) {
+      const idx = today.getDate()-1;
+      const vx = x(idx);
+      ctx.strokeStyle="rgba(255,204,102,.9)";
+      ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(vx, padT); ctx.lineTo(vx, H-padB); ctx.stroke();
+    }
+
+    ctx.fillStyle="rgba(127,182,255,.95)";
+    ctx.fillRect(W-180, 18, 10, 10);
+    ctx.fillStyle="rgba(238,240,255,.82)";
+    ctx.fillText("Pace target", W-164, 28);
+    ctx.fillStyle="rgba(108,242,194,.95)";
+    ctx.fillRect(W-180, 38, 10, 10);
+    ctx.fillStyle="rgba(238,240,255,.82)";
+    ctx.fillText("Actual (cum)", W-164, 48);
+  }
+
+  function hash(s) {
+    let h=0;
+    for(let i=0;i<s.length;i++) h = (h<<5) - h + s.charCodeAt(i), h|=0;
+    return h;
+  }
+  function renderHero() {
+    const mk = monthKey(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
+    const idx = Math.abs(hash(mk)) % cars.length;
+    const car = cars[idx];
+    $("carName").textContent = car.name;
+    $("heroTitle").textContent = car.title;
+    $("heroSub").textContent = car.sub;
+    $("heroBg").style.background = car.bg;
+  }
+
+  $("exportBtn").onclick = ()=>{
+    const blob = new Blob([JSON.stringify(S, null, 2)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `salespace_export_${monthKey(new Date())}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  $("importBtn").onclick = ()=> $("importFile").click();
+  $("importFile").addEventListener("change", async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    const txt = await file.text();
+    try {
+      const parsed = JSON.parse(txt);
+      S = Object.assign(defaultState(), parsed);
+      save();
+      toast("Imported", "Data loaded. Calendar refreshed.");
+      renderCalendar();
+      renderSettings();
+      renderAnalytics();
+    } catch(err) {
+      toast("Import failed", "That file was not valid JSON.");
+    }
+    e.target.value = "";
+  });
+
+  function pickAfterLabel(lines, labelSet) {
+    const set = new Set(labelSet.map(s=>s.toLowerCase()));
+    for(let i=0;i<lines.length;i++) {
+      const L = lines[i].toLowerCase();
+      if(set.has(L)) {
+        for(let j=i+1;j<Math.min(i+8, lines.length);j++) {
+          if(/^[-+]?\d+(\.\d+)?$/.test(lines[j])) return parseFloat(lines[j]);
+        }
+      }
+    }
+    return null;
+  }
+  function parseDealsBlocks(text) {
+    const lines = String(text||"").replace(/\r/g,"").split("\n");
+    const blocks=[]; let cur=[];
+    for(const raw of lines) {
+      const s = raw.trim();
+      if(!s) { if(cur.length) { blocks.push(cur); cur=[]; } }
+      else cur.push(s);
+    }
+    if(cur.length) blocks.push(cur);
+
+    const deals=[];
+    const dateRe = /(\d{2})\/(\d{2})\/(\d{4})/;
+    for(const b of blocks) {
+      const joined = b.join(" | ");
+      let days=null, units=null, stage=b[0]||"";
+      for(const x of b) {
+        const md = x.match(/(\d+)\s*Days/i);
+        if(md) days = parseInt(md[1],10);
+        if(/^\d+(\.\d+)?$/.test(x)) {
+          const v = parseFloat(x);
+          if(v>=0 && v<=2) units = v;
+        }
+      }
+      let closeDate=null;
+      for(const x of b) {
+        const m = x.match(dateRe);
+        if(m) { closeDate=m[0]; break; }
+      }
+      if(stage || days!=null || units!=null || closeDate) deals.push({stage,days,units,joined});
+    }
+    return deals;
+  }
+
+  function analyzePaste() {
+    const raw = $("crmPaste").value || "";
+    const lines = raw.replace(/\r/g,"").split("\n").map(s=>s.trim()).filter(Boolean);
+
+    const hasAppointments = lines.includes("Appointments") && (lines.includes("Created") || lines.includes("Scheduled"));
+    const hasComms = lines.includes("Communications") && (lines.includes("Calls Out") || lines.includes("User Texts Sent"));
+    const hasFunnel = lines.includes("Attempted Contact") || lines.includes("Engaged") || lines.includes("Appointment Created") || lines.includes("Sold");
+
+    let detected = [];
+    if(hasFunnel) detected.push("funnel");
+    if(hasComms) detected.push("communications");
+    if(hasAppointments) detected.push("activity");
+
+    const scheduled = pickAfterLabel(lines, ["Scheduled","Appt. Scheduled","Appt Scheduled"]);
+    const shown = pickAfterLabel(lines, ["Shown","Appointment Showed","Appt. Showed","Appt Showed"]);
+    const showRate = (shown!=null && scheduled>0) ? shown/scheduled : null;
+
+    const calls = pickAfterLabel(lines, ["Calls Out","Calls"]);
+    const texts = pickAfterLabel(lines, ["User Texts Sent","Texts Sent","User Texts"]);
+    const emails = pickAfterLabel(lines, ["User Emails Sent","Emails Sent","Emails"]);
+    const contacts = (calls||0) + (texts||0) + (emails||0);
+
+    const sold = pickAfterLabel(lines, ["Sold"]);
+    let leads = pickAfterLabel(lines, ["All Leads","Total Good Leads","Leads"]);
+    const closeRate = (sold!=null && leads>0) ? sold/leads : null;
+
+    const deals = parseDealsBlocks(raw);
+    const daysList = deals.map(d=>d.days).filter(v=>Number.isFinite(v));
+    const avgCycle = daysList.length ? Math.round(daysList.reduce((a,b)=>a+b,0)/daysList.length) : null;
+    const units = deals.map(d=>d.units).filter(v=>Number.isFinite(v)).reduce((a,b)=>a+b,0);
+    const cps = (units>0 && contacts>0) ? Math.round(contacts/units) : null;
+
+    S.analytics.detected = detected.length ? detected.join("+") : (deals.length ? "deals" : "unknown");
+    S.analytics.show = showRate;
+    S.analytics.close = closeRate;
+    S.analytics.cps = cps;
+    S.analytics.cycle = avgCycle;
+    S.analytics.contacts = contacts;
+    save();
+
+    renderAnalytics();
+    toast("Analyzed", `Detected: ${S.analytics.detected}`);
+  }
+
+  function renderAnalytics() {
+    $("analyticsDetected").textContent = S.analytics.detected || "—";
+    $("mClose").textContent = pct(S.analytics.close);
+    $("mShow").textContent = pct(S.analytics.show);
+    $("mCPS").textContent = (S.analytics.cps==null ? "—" : String(S.analytics.cps));
+    $("mCycle").textContent = (S.analytics.cycle==null ? "—" : String(S.analytics.cycle));
+
+    const set = S.settings;
+    const close = S.analytics.close;
+    const show = S.analytics.show;
+    const cps = S.analytics.cps;
+    const cycle = S.analytics.cycle;
+
+    const impact = [];
+    if(cps!=null) impact.push(`Contacts-per-sale tuned to ~${cps} (used for checklist).`);
+    if(close!=null) impact.push(`Close rate estimated at ${Math.round(close*100)}%.`);
+    if(show!=null) impact.push(`Show rate ${Math.round(show*100)}% (push confirmations if low).`);
+    if(cycle!=null) impact.push(`Avg cycle ~${cycle} days.`);
+    if(!impact.length) impact.push("Paste CRM data and click Analyze to unlock tuning.");
+    $("impactText").textContent = impact.join(" ");
+
+    const bench = [];
+    if(close!=null) bench.push(`Close: ${Math.round(close*100)}% vs industry ${Math.round(set.indClose*100)}%`);
+    if(cps!=null) bench.push(`Contacts/Sale: ${cps} vs industry ${set.indCPS}`);
+    if(show!=null) bench.push(`Show: ${Math.round(show*100)}% vs industry ${Math.round(set.indShow*100)}%`);
+    if(!bench.length) bench.push("Set industry benchmarks in Settings and analyze your CRM paste.");
+    $("benchText").textContent = bench.join(" • ");
+  }
+
+  $("analyzeBtn").onclick = analyzePaste;
+  $("clearPaste").onclick = ()=>{ $("crmPaste").value=""; toast("Cleared","Paste box cleared."); };
+  $("applyBtn").onclick = ()=>{ S.analytics.appliedAt = new Date().toISOString(); save(); renderCalendar(); toast("Applied","Analytics tuning applied."); };
+
+  function ensureTeam(mk) {
+    if(!S.leaderboard[mk]) S.leaderboard[mk] = { reps: {} };
+    return S.leaderboard[mk];
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",""":"&quot;"}[c]));
+  }
+
+  function statusBadge(r) {
+    const goal = +S.settings.goalUnits||11;
+    const pctg = goal>0 ? (r.units/goal) : 0;
+    const cls = pctg>=1 ? "good" : (pctg>=0.85 ? "warn" : "bad");
+    const txt = pctg>=1 ? "On track" : (pctg>=0.85 ? "Close" : "Behind");
+    return `<span class="badge ${cls}">${txt}</span>`;
+  }
+
+  function renderLeaderboard() {
+    const mk = ($("teamMonth").value || monthKey(new Date(cursor.getFullYear(), cursor.getMonth(), 1))).trim();
+    $("teamMonth").value = mk;
+    const team = ensureTeam(mk);
+    const rows = Object.entries(team.reps).map(([name,r])=>({name,...r}));
+    rows.sort((a,b)=> (b.score-a.score) || (b.units-a.units) || (b.contacts-a.contacts));
+
+    $("lbCount").textContent = `${rows.length} reps`;
+    const tb = $("lbTable").querySelector("tbody");
+    tb.innerHTML = "";
+    rows.forEach((r,i)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="mono">${i+1}</td>
+        <td><div style="font-weight:800">${escapeHtml(r.name)}</div><div class="small">${escapeHtml(r.note||"")}</div></td>
+        <td class="mono">${fmt1(r.units||0)}</td>
+        <td class="mono">${Math.round(r.contacts||0)}</td>
+        <td class="mono">${Math.round(r.appts||0)}</td>
+        <td class="mono">${Math.round(r.score||0)}</td>
+        <td>${statusBadge(r)}</td>
+      `;
+      tb.appendChild(tr);
+    });
+  }
+
+  function updateMe() {
+    const name = ($("meName").value || "").trim();
+    if(!name) return toast("Missing name", "Enter your name for the leaderboard.");
+    const mk = ($("teamMonth").value || monthKey(new Date(cursor.getFullYear(), cursor.getMonth(), 1))).trim();
+    $("teamMonth").value = mk;
+    const note = ($("meNote").value || "").trim();
+
+    const msum = sumMonth(mk);
+    const rep = {
+      units: +msum.units||0,
+      contacts: +msum.contacts||0,
+      appts: +msum.appts||0,
+      score: +msum.score||0,
+      note,
+      updatedAt: new Date().toISOString()
+    };
+    const team = ensureTeam(mk);
+    team.reps[name] = rep;
+    save();
+    toast("Leaderboard", "Your row was added/updated.");
+    renderLeaderboard();
+  }
+
+  $("lbAddMe").onclick = updateMe;
+  $("lbExport").onclick = ()=>{
+    const mk = ($("teamMonth").value || monthKey(new Date(cursor.getFullYear(), cursor.getMonth(), 1))).trim();
+    const blob = new Blob([JSON.stringify({monthKey: mk, team: ensureTeam(mk)}, null, 2)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `team_leaderboard_${mk}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  $("lbImport").onclick = ()=> $("lbFile").click();
+  $("lbFile").addEventListener("change", async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    const txt = await file.text();
+    try {
+      const parsed = JSON.parse(txt);
+      const mk = parsed.monthKey || ($("teamMonth").value||"").trim() || monthKey(new Date());
+      $("teamMonth").value = mk;
+      if(parsed.team && parsed.team.reps) {
+        S.leaderboard[mk] = parsed.team;
+        save();
+        toast("Imported", "Team leaderboard loaded.");
+        renderLeaderboard();
+      } else {
+        toast("Import failed", "Team file missing 'team.reps'.");
+      }
+    } catch(err) {
+      toast("Import failed", "Invalid JSON.");
+    }
+    e.target.value = "";
+  });
+
+  function renderSettings() {
+    $("setGoal").value = S.settings.goalUnits;
+    $("setFinishDays").value = S.settings.finishDays;
+    $("setFinishMult").value = S.settings.finishMult;
+    $("setCalls").value = S.settings.dailyCalls;
+    $("setContacts").value = S.settings.dailyContacts;
+    $("setAppts").value = S.settings.dailyAppts;
+    $("setWeeklyMode").checked = !!S.settings.weeklyMode;
+    $("setIndClose").value = S.settings.indClose;
+    $("setIndCPS").value = S.settings.indCPS;
+    $("setIndShow").value = S.settings.indShow;
+  }
+
+  $("saveSettings").onclick = ()=>{
+    S.settings.goalUnits = num($("setGoal").value) || 11;
+    S.settings.finishDays = int($("setFinishDays").value) || 7;
+    S.settings.finishMult = num($("setFinishMult").value) || 1.15;
+    S.settings.dailyCalls = int($("setCalls").value) || 40;
+    S.settings.dailyContacts = int($("setContacts").value) || 80;
+    S.settings.dailyAppts = int($("setAppts").value) || 2;
+    S.settings.weeklyMode = !!$("setWeeklyMode").checked;
+    S.settings.indClose = num($("setIndClose").value) || 0.12;
+    S.settings.indCPS = int($("setIndCPS").value) || 85;
+    S.settings.indShow = num($("setIndShow").value) || 0.35;
+    save();
+    renderCalendar();
+    renderAnalytics();
+    toast("Saved", "Settings updated.");
+  };
+
+  $("nukeBtn").onclick = ()=>{
+    if(confirm("Factory reset EVERYTHING? This clears all months + analytics.")) {
+      S = defaultState();
+      save();
+      cursor = new Date();
+      $("crmPaste").value="";
+      toast("Reset", "All data cleared.");
+      renderCalendar();
+      renderAnalytics();
+      renderSettings();
+    }
+  };
+
+  $("meName").value = (localStorage.getItem("salespace_meName") || "");
+  $("meName").addEventListener("input", ()=> localStorage.setItem("salespace_meName", $("meName").value));
+  $("teamMonth").value = monthKey(new Date());
+
+  renderSettings();
+  renderAnalytics();
+  renderCalendar();
+})();
+</script>
+
+</body>
+</html>
