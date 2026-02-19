@@ -131,6 +131,21 @@ def fetch_rss() -> list[Vehicle]:
         m = re.search(r"Exterior Color[:\s]+([^<\n,]+)", description_html, re.I)
         exterior_color = m.group(1).strip() if m else ""
 
+        # ── Price from RSS description ────────────────────────────────────────
+        rss_price: Optional[str] = None
+        _price_pats = [
+            r"(?:Sale|Internet|Our|Asking|Final|List|MSRP|Retail)\s*Price[:\s]*\$?\s*([\d]{2,3},?[\d]{3})",
+            r"Price[:\s]*\$\s*([\d]{2,3},?[\d]{3})",
+            r"\$\s*([\d]{2,3},[\d]{3})",
+        ]
+        for _pat in _price_pats:
+            _pm = re.search(_pat, description_html, re.I)
+            if _pm:
+                _val = int(_pm.group(1).replace(",", ""))
+                if 500 < _val < 500_000:
+                    rss_price = f"{_val} USD"
+                    break
+
         # ── Image URL ────────────────────────────────────────────────────────
         m = re.search(r'src=["\']([^"\']+inventoryphotos[^"\']+)["\']', description_html, re.I)
         if m:
@@ -173,9 +188,11 @@ def fetch_rss() -> list[Vehicle]:
             model=model,
             trim=trim,
             description=description,
+            price=rss_price,
         ))
 
-    print(f"[RSS] Parsed {len(vehicles)} vehicles", flush=True)
+    rss_prices = sum(1 for v in vehicles if v.price)
+    print(f"[RSS] Parsed {len(vehicles)} vehicles ({rss_prices} with price in feed)", flush=True)
     return vehicles
 
 
@@ -222,17 +239,32 @@ async def _scrape_one(page, vehicle: Vehicle) -> Optional[str]:
     return None
 
 
-async def scrape_prices(vehicles: list[Vehicle]) -> list[Vehicle]:
-    """Scrape all VDP pages concurrently, limited by PRICE_SCRAPE_CONCURRENCY."""
+async def scrape_prices(vehicles: list[Vehicle], debug: bool = False) -> list[Vehicle]:
+    """Scrape VDP pages for vehicles that still need a price."""
+    need_scrape = [v for v in vehicles if not v.price]
+    rss_found   = len(vehicles) - len(need_scrape)
+    if rss_found:
+        print(f"[Playwright] {rss_found}/{len(vehicles)} prices already in RSS — skipping those.", flush=True)
+    if not need_scrape:
+        return vehicles
+
     sem = asyncio.Semaphore(PRICE_SCRAPE_CONCURRENCY)
+    debug_saved = False
 
     async def run_one(ctx, v: Vehicle):
+        nonlocal debug_saved
         async with sem:
             page = await ctx.new_page()
             try:
                 v.price = await _scrape_one(page, v)
                 status = v.price if v.price else "not found"
                 print(f"    {v.vin[:10]}  {v.title[:42]:42s}  {status}", flush=True)
+                if debug and not v.price and not debug_saved:
+                    html = await page.content()
+                    with open("debug_vdp.html", "w", encoding="utf-8") as fh:
+                        fh.write(html)
+                    print(f"    [DEBUG] Saved page HTML → debug_vdp.html ({v.link})", flush=True)
+                    debug_saved = True
             finally:
                 await page.close()
 
@@ -247,11 +279,11 @@ async def scrape_prices(vehicles: list[Vehicle]) -> list[Vehicle]:
             viewport={"width": 1280, "height": 800},
         )
         print(
-            f"\n[Playwright] Scraping {len(vehicles)} VDPs "
+            f"\n[Playwright] Scraping {len(need_scrape)} VDPs without RSS price "
             f"(concurrency={PRICE_SCRAPE_CONCURRENCY})...",
             flush=True,
         )
-        await asyncio.gather(*[run_one(ctx, v) for v in vehicles])
+        await asyncio.gather(*[run_one(ctx, v) for v in need_scrape])
         await browser.close()
 
     found = sum(1 for v in vehicles if v.price)
@@ -388,6 +420,11 @@ def main() -> None:
         action="store_true",
         help="Skip Playwright price scraping (prices will be blank).",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Save HTML of the first VDP that fails price scraping to debug_vdp.html.",
+    )
     args = parser.parse_args()
 
     print("=" * 60)
@@ -407,7 +444,7 @@ def main() -> None:
         print("\n[2/4] Skipping price scraping (--no-price-scrape).")
     else:
         print("\n[2/4] Scraping vehicle prices with Playwright…")
-        vehicles = asyncio.run(scrape_prices(vehicles))
+        vehicles = asyncio.run(scrape_prices(vehicles, debug=args.debug))
 
     # 3 — CSV backup (always)
     print("\n[3/4] Saving CSV backup…")
