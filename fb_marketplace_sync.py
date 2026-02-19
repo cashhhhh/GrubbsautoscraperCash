@@ -43,7 +43,7 @@ FB_CATALOG_ID            = os.getenv("FB_CATALOG_ID",   "")
 FB_API_VERSION           = os.getenv("FB_API_VERSION",  "v21.0")
 BATCH_SIZE               = int(os.getenv("BATCH_SIZE",               "50"))
 PRICE_SCRAPE_CONCURRENCY = int(os.getenv("PRICE_SCRAPE_CONCURRENCY", "5"))
-PRICE_SCRAPE_TIMEOUT_MS  = int(os.getenv("PRICE_SCRAPE_TIMEOUT_MS",  "20000"))
+PRICE_SCRAPE_TIMEOUT_MS  = int(os.getenv("PRICE_SCRAPE_TIMEOUT_MS",  "30000"))
 CSV_OUTPUT_PATH          = os.getenv("CSV_OUTPUT_PATH", "inventory_feed.csv")
 
 # DealerOn price selectors — tried in order, first match wins
@@ -199,39 +199,105 @@ def fetch_rss() -> list[Vehicle]:
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 2 — Scrape prices with Playwright
 # ──────────────────────────────────────────────────────────────────────────────
+def _parse_price_val(text: str) -> Optional[str]:
+    """Extract a plausible vehicle price from a string. Returns 'NNNNN USD' or None."""
+    m = re.search(r"\$?\s*([\d]{1,3}(?:,[\d]{3})+|[\d]{4,6})", text)
+    if m:
+        val = int(m.group(1).replace(",", ""))
+        if 500 < val < 500_000:
+            return f"{val} USD"
+    return None
+
+
+async def _price_from_json_ld(page) -> Optional[str]:
+    """Try to extract price from JSON-LD structured data embedded in the page."""
+    scripts = await page.query_selector_all('script[type="application/ld+json"]')
+    for script in scripts:
+        try:
+            content = await script.inner_text()
+            data = json.loads(content)
+            # data may be a list or a single object
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                # Vehicle or Product schema
+                offers = item.get("offers") or item.get("Offers")
+                if offers:
+                    if isinstance(offers, list):
+                        offers = offers[0]
+                    price_raw = str(offers.get("price", ""))
+                    result = _parse_price_val(price_raw)
+                    if result:
+                        return result
+                # Sometimes price is directly on the item
+                for key in ("price", "Price", "salePrice", "offerPrice"):
+                    if key in item:
+                        result = _parse_price_val(str(item[key]))
+                        if result:
+                            return result
+        except Exception:
+            continue
+    return None
+
+
+async def _price_from_js(page) -> Optional[str]:
+    """Try to read price from common dealer JS globals."""
+    snippets = [
+        "window.digitalData?.product?.[0]?.productInfo?.price?.basePrice",
+        "window.vehicleData?.price",
+        "window.vehicle?.price",
+        "window.pageData?.vehicle?.price",
+        "window.inventory?.price",
+        "window.ddl?.vehicle?.price",
+    ]
+    for snippet in snippets:
+        try:
+            val = await page.evaluate(f"(() => {{ try {{ return {snippet}; }} catch(e) {{ return null; }} }})()")
+            if val:
+                result = _parse_price_val(str(val))
+                if result:
+                    return result
+        except Exception:
+            continue
+    return None
+
+
 async def _scrape_one(page, vehicle: Vehicle) -> Optional[str]:
     """Return price as '24995 USD', or None if not found."""
     try:
         await page.goto(
             vehicle.link,
-            wait_until="domcontentloaded",
+            wait_until="networkidle",
             timeout=PRICE_SCRAPE_TIMEOUT_MS,
         )
 
-        # Give JS a moment to hydrate pricing widgets
-        await page.wait_for_timeout(2500)
+        # 1 — JSON-LD structured data (most reliable)
+        result = await _price_from_json_ld(page)
+        if result:
+            return result
 
+        # 2 — JS globals set by the dealer platform
+        result = await _price_from_js(page)
+        if result:
+            return result
+
+        # 3 — CSS selectors
         for selector in PRICE_SELECTORS:
             try:
-                await page.wait_for_selector(selector, timeout=3000)
-                raw_text = await page.inner_text(selector)
-                m = re.search(r"\$?\s*([\d]{2,3},?[\d]{3})", raw_text)
-                if m:
-                    val = int(m.group(1).replace(",", ""))
-                    if 500 < val < 500_000:
-                        return f"{val} USD"
-            except PWTimeout:
+                el = await page.query_selector(selector)
+                if el:
+                    raw_text = await el.inner_text()
+                    result = _parse_price_val(raw_text)
+                    if result:
+                        return result
+            except Exception:
                 continue
 
-        # Last resort: scan full page text for price-shaped numbers
+        # 4 — Last resort: scan full page text near the word "price"
         body = await page.inner_text("body")
-        # Pattern: "$XX,XXX" or "XX,XXX" near the word "price"
-        # Take the first match in a ±200-char window around "price"
         for price_section in re.finditer(r"(?i)price.{0,200}", body):
-            for m in re.finditer(r"\$?\s*([\d]{2,3},[\d]{3})", price_section.group()):
-                val = int(m.group(1).replace(",", ""))
-                if 500 < val < 500_000:
-                    return f"{val} USD"
+            result = _parse_price_val(price_section.group())
+            if result:
+                return result
 
     except Exception as exc:
         print(f"    [WARN] {vehicle.vin}: {exc}", flush=True)
