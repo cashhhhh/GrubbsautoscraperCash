@@ -42,8 +42,7 @@ load_dotenv()
 # Add rss-newinventory.aspx here if you ever want brand-new cars too.
 _rss_urls_env = os.getenv(
     "RSS_URLS",
-    "https://www.infinitiofsanantonio.com/rss-usedinventory.aspx,"
-    "https://www.infinitiofsanantonio.com/rss-certifiedinventory.aspx",
+    "https://www.infinitiofsanantonio.com/rss-usedinventory.aspx",
 )
 RSS_URLS = [u.strip() for u in _rss_urls_env.split(",") if u.strip()]
 DEALER_BASE_URL          = os.getenv("DEALER_BASE_URL", "https://www.infinitiofsanantonio.com")
@@ -56,8 +55,8 @@ FB_ACCESS_TOKEN          = os.getenv("FB_ACCESS_TOKEN", "")
 FB_CATALOG_ID            = os.getenv("FB_CATALOG_ID",   "")
 FB_API_VERSION           = os.getenv("FB_API_VERSION",  "v21.0")
 BATCH_SIZE               = int(os.getenv("BATCH_SIZE",               "50"))
-PRICE_SCRAPE_CONCURRENCY = int(os.getenv("PRICE_SCRAPE_CONCURRENCY", "5"))
-PRICE_SCRAPE_TIMEOUT_MS  = int(os.getenv("PRICE_SCRAPE_TIMEOUT_MS",  "30000"))
+PRICE_SCRAPE_CONCURRENCY = int(os.getenv("PRICE_SCRAPE_CONCURRENCY", "3"))
+PRICE_SCRAPE_TIMEOUT_MS  = int(os.getenv("PRICE_SCRAPE_TIMEOUT_MS",  "60000"))
 CSV_OUTPUT_PATH          = os.getenv("CSV_OUTPUT_PATH", "inventory_feed.csv")
 # Only process RSS URLs whose domain contains this string.
 # Guards against accidentally pulling partner / other-store feeds.
@@ -314,11 +313,11 @@ async def _scrape_one(page, vehicle: Vehicle) -> Optional[str]:
     try:
         await page.goto(
             vehicle.link,
-            wait_until="load",
+            wait_until="domcontentloaded",  # don't wait for ad/chat/image resources
             timeout=PRICE_SCRAPE_TIMEOUT_MS,
         )
-        # Give AJAX pricing calls time to return after the page fires "load"
-        await page.wait_for_timeout(3000)
+        # Give AJAX pricing calls a moment to populate after DOM is ready
+        await page.wait_for_timeout(2000)
 
         # 1 — JSON-LD structured data (most reliable)
         result = await _price_from_json_ld(page)
