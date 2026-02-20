@@ -516,6 +516,32 @@ def resolve_catalog_id() -> str:
     return ""
 
 
+def check_catalog_type(catalog_id: str) -> None:
+    """Query and print the catalog's vertical/type so the user can confirm it's automotive."""
+    try:
+        r = requests.get(
+            f"https://graph.facebook.com/{FB_API_VERSION}/{catalog_id}",
+            params={"fields": "id,name,vertical", "access_token": FB_ACCESS_TOKEN},
+            timeout=15,
+        )
+        data = r.json()
+        if "error" in data:
+            print(f"  [FB] Could not read catalog info: {data['error'].get('message')}", flush=True)
+        else:
+            vertical = data.get("vertical", "unknown")
+            name     = data.get("name", "unknown")
+            print(f"  [FB] Catalog: \"{name}\" | vertical={vertical}", flush=True)
+            if vertical.lower() not in ("vehicles", "automotive"):
+                print(
+                    f"  [FB] WARNING — catalog vertical is '{vertical}', not 'vehicles'.\n"
+                    f"  [FB] Go to Commerce Manager → delete this catalog → create a new one\n"
+                    f"  [FB] and choose 'Vehicles' as the catalog type, then update FB_CATALOG_ID in .env.",
+                    flush=True,
+                )
+    except Exception as exc:
+        print(f"  [FB] catalog type check failed: {exc}", flush=True)
+
+
 def upload_to_facebook(vehicles: list[Vehicle]) -> bool:
     """
     POST vehicles to the Facebook Product Catalog batch endpoint.
@@ -539,9 +565,11 @@ def upload_to_facebook(vehicles: list[Vehicle]) -> bool:
             "\n[FB] Could not determine catalog ID — skipping upload.\n"
             "     Set FB_CATALOG_ID in .env and re-run.",
             flush=True,
+
         )
         return False
 
+    check_catalog_type(catalog_id)
     endpoint = f"https://graph.facebook.com/{FB_API_VERSION}/{catalog_id}/batch"
     all_ok = True
 
