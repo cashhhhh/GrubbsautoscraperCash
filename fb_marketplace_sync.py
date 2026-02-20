@@ -87,12 +87,18 @@ class Vehicle:
 # ──────────────────────────────────────────────────────────────────────────────
 def fetch_rss() -> list[Vehicle]:
     """Fetch and parse the DealerOn used-inventory RSS feed."""
-    resp = requests.get(RSS_URL, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
-    resp.raise_for_status()
+    try:
+        resp = requests.get(RSS_URL, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Unable to fetch RSS feed at {RSS_URL}: {exc}") from exc
 
     # Strip any BOM / leading whitespace that would break ET
     raw = resp.text.lstrip("\ufeff").strip()
-    root = ET.fromstring(raw)
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError as exc:
+        raise RuntimeError(f"RSS feed returned invalid XML from {RSS_URL}: {exc}") from exc
 
     vehicles: list[Vehicle] = []
     for item in root.findall(".//item"):
@@ -347,15 +353,25 @@ def upload_to_facebook(vehicles: list[Vehicle]) -> bool:
             for v in chunk
         ]
 
-        resp = requests.post(
-            endpoint,
-            data={
-                "requests":     json.dumps(requests_payload),
-                "access_token": FB_ACCESS_TOKEN,
-            },
-            timeout=60,
-        )
-        result = resp.json()
+        try:
+            resp = requests.post(
+                endpoint,
+                data={
+                    "requests":     json.dumps(requests_payload),
+                    "access_token": FB_ACCESS_TOKEN,
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+        except requests.RequestException as exc:
+            print(f"  [FB] Batch {batch_num} request failed: {exc}", flush=True)
+            all_ok = False
+            continue
+        except json.JSONDecodeError as exc:
+            print(f"  [FB] Batch {batch_num} returned non-JSON response: {exc}", flush=True)
+            all_ok = False
+            continue
 
         if "error" in result:
             print(f"  [FB] Batch {batch_num} ERROR: {result['error']}", flush=True)
@@ -397,7 +413,11 @@ def main() -> None:
 
     # 1 — Fetch RSS
     print("\n[1/4] Fetching inventory from DealerOn RSS feed…")
-    vehicles = fetch_rss()
+    try:
+        vehicles = fetch_rss()
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
     if not vehicles:
         print("No vehicles found. Exiting.")
         sys.exit(1)
