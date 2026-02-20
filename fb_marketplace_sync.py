@@ -37,11 +37,12 @@ load_dotenv()
 # Config  (override any of these in .env)
 # ──────────────────────────────────────────────────────────────────────────────
 # Comma-separated list of RSS feed URLs to pull from.
-# Defaults to both used and new inventory so pricier cars are included.
+# Used + CPO gives a good mix: cheap daily drivers AND expensive certified INFINITIs.
+# Add rss-newinventory.aspx here if you ever want brand-new cars too.
 _rss_urls_env = os.getenv(
     "RSS_URLS",
     "https://www.infinitiofsanantonio.com/rss-usedinventory.aspx,"
-    "https://www.infinitiofsanantonio.com/rss-newinventory.aspx",
+    "https://www.infinitiofsanantonio.com/rss-certifiedinventory.aspx",
 )
 RSS_URLS = [u.strip() for u in _rss_urls_env.split(",") if u.strip()]
 DEALER_BASE_URL          = os.getenv("DEALER_BASE_URL", "https://www.infinitiofsanantonio.com")
@@ -445,6 +446,59 @@ def save_csv(vehicles: list[Vehicle], path: str = CSV_OUTPUT_PATH) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 4b — Upload to Facebook Catalog API
 # ──────────────────────────────────────────────────────────────────────────────
+def resolve_catalog_id() -> str:
+    """
+    Return FB_CATALOG_ID from env, or auto-discover the first automotive
+    catalog accessible to the token via the Graph API.
+    """
+    if FB_CATALOG_ID and FB_CATALOG_ID != "your_catalog_id_here":
+        return FB_CATALOG_ID
+
+    if not FB_ACCESS_TOKEN:
+        return ""
+
+    print("[FB] FB_CATALOG_ID not set — querying Graph API to find your catalog…", flush=True)
+
+    base = f"https://graph.facebook.com/{FB_API_VERSION}"
+    token_param = f"access_token={FB_ACCESS_TOKEN}"
+
+    # Try: businesses the token can see → their owned catalogs
+    try:
+        r = requests.get(
+            f"{base}/me/businesses?fields=id,name,owned_product_catalogs{{id,name}}&{token_param}",
+            timeout=15,
+        )
+        data = r.json()
+        for biz in data.get("data", []):
+            cats = (biz.get("owned_product_catalogs") or {}).get("data", [])
+            if cats:
+                cat = cats[0]
+                print(f"[FB] Auto-detected catalog: {cat['name']} (id={cat['id']})", flush=True)
+                print(f"[FB] Tip: set FB_CATALOG_ID={cat['id']} in .env to skip this lookup.", flush=True)
+                return cat["id"]
+    except Exception:
+        pass
+
+    # Fallback: catalogs directly on the token (system-user tokens)
+    try:
+        r = requests.get(
+            f"{base}/me/product_catalogs?fields=id,name&{token_param}",
+            timeout=15,
+        )
+        data = r.json()
+        cats = data.get("data", [])
+        if cats:
+            cat = cats[0]
+            print(f"[FB] Auto-detected catalog: {cat['name']} (id={cat['id']})", flush=True)
+            print(f"[FB] Tip: set FB_CATALOG_ID={cat['id']} in .env to skip this lookup.", flush=True)
+            return cat["id"]
+    except Exception:
+        pass
+
+    print("[FB] Could not auto-detect catalog ID. Set FB_CATALOG_ID in .env manually.", flush=True)
+    return ""
+
+
 def upload_to_facebook(vehicles: list[Vehicle]) -> bool:
     """
     POST vehicles to the Facebook Product Catalog batch endpoint.
@@ -454,15 +508,24 @@ def upload_to_facebook(vehicles: list[Vehicle]) -> bool:
       POST /{catalog_id}/batch
       https://developers.facebook.com/docs/marketing-api/catalog/reference/
     """
-    if not FB_ACCESS_TOKEN or not FB_CATALOG_ID:
+    if not FB_ACCESS_TOKEN:
         print(
-            "\n[FB] FB_ACCESS_TOKEN or FB_CATALOG_ID not set — skipping upload.\n"
-            "     Fill them in .env and re-run, or use --csv-only to just export the feed.",
+            "\n[FB] FB_ACCESS_TOKEN not set — skipping upload.\n"
+            "     Fill it in .env and re-run, or use --csv-only to just export the feed.",
             flush=True,
         )
         return False
 
-    endpoint = f"https://graph.facebook.com/{FB_API_VERSION}/{FB_CATALOG_ID}/batch"
+    catalog_id = resolve_catalog_id()
+    if not catalog_id:
+        print(
+            "\n[FB] Could not determine catalog ID — skipping upload.\n"
+            "     Set FB_CATALOG_ID in .env and re-run.",
+            flush=True,
+        )
+        return False
+
+    endpoint = f"https://graph.facebook.com/{FB_API_VERSION}/{catalog_id}/batch"
     all_ok = True
 
     for batch_num, i in enumerate(range(0, len(vehicles), BATCH_SIZE), start=1):
