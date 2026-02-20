@@ -47,6 +47,11 @@ _rss_urls_env = os.getenv(
 )
 RSS_URLS = [u.strip() for u in _rss_urls_env.split(",") if u.strip()]
 DEALER_BASE_URL          = os.getenv("DEALER_BASE_URL", "https://www.infinitiofsanantonio.com")
+DEALER_ADDR1             = os.getenv("DEALER_ADDR1",    "11911 IH 10 West")
+DEALER_CITY              = os.getenv("DEALER_CITY",     "San Antonio")
+DEALER_REGION            = os.getenv("DEALER_REGION",   "Texas")
+DEALER_POSTAL_CODE       = os.getenv("DEALER_POSTAL_CODE", "78230")
+DEALER_COUNTRY           = os.getenv("DEALER_COUNTRY",  "United States")
 FB_ACCESS_TOKEN          = os.getenv("FB_ACCESS_TOKEN", "")
 FB_CATALOG_ID            = os.getenv("FB_CATALOG_ID",   "")
 FB_API_VERSION           = os.getenv("FB_API_VERSION",  "v21.0")
@@ -392,53 +397,97 @@ async def scrape_prices(vehicles: list[Vehicle], debug: bool = False) -> list[Ve
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 3 — Build Facebook automotive feed rows
+# Step 3 — Build Facebook automotive XML feed
 # ──────────────────────────────────────────────────────────────────────────────
-# Field names match Facebook's documented automotive inventory CSV feed format.
-FEED_FIELDS = [
-    "id", "title", "description", "availability", "condition",
-    "price", "link", "image_link",
-    "year", "make", "model", "trim",
-    "mileage.value", "mileage.unit",
-    "exterior_color", "vin",
-    "vehicle_type", "state_of_vehicle",
+def _price_to_decimal_str(price: Optional[str]) -> str:
+    """Convert '24995 USD' → '24995.00 USD' as required by the feed format."""
+    if not price:
+        return "0.00 USD"
+    m = re.match(r"(\d+)\s+([A-Z]+)", price)
+    if m:
+        return f"{int(m.group(1)):.2f} {m.group(2)}"
+    return price
+
+
+def build_xml_feed(vehicles: list[Vehicle]) -> bytes:
+    """Return a Facebook automotive XML feed as UTF-8 bytes."""
+    root = ET.Element("listings")
+    ET.SubElement(root, "title").text = "Grubbs INFINITI of San Antonio"
+
+    for v in vehicles:
+        listing = ET.SubElement(root, "listing")
+
+        ET.SubElement(listing, "vehicle_id").text  = v.vin
+        ET.SubElement(listing, "title").text        = v.title
+        ET.SubElement(listing, "description").text  = v.description
+        ET.SubElement(listing, "url").text           = v.link
+
+        img = ET.SubElement(listing, "image")
+        ET.SubElement(img, "url").text = v.image_url
+
+        ET.SubElement(listing, "price").text = _price_to_decimal_str(v.price)
+
+        mil = ET.SubElement(listing, "mileage")
+        ET.SubElement(mil, "unit").text  = "MI"
+        ET.SubElement(mil, "value").text = v.mileage if v.mileage else "0"
+
+        ET.SubElement(listing, "state_of_vehicle").text = v.condition.upper()
+        ET.SubElement(listing, "make").text             = v.make
+        ET.SubElement(listing, "model").text            = v.model
+        if v.year:
+            ET.SubElement(listing, "year").text = v.year
+        if v.trim:
+            ET.SubElement(listing, "trim").text = v.trim
+        if v.exterior_color:
+            ET.SubElement(listing, "exterior_color").text = v.exterior_color
+
+        addr = ET.SubElement(listing, "address")
+        addr.set("format", "simple")
+        for name, value in [
+            ("addr1",       DEALER_ADDR1),
+            ("city",        DEALER_CITY),
+            ("region",      DEALER_REGION),
+            ("postal_code", DEALER_POSTAL_CODE),
+            ("country",     DEALER_COUNTRY),
+        ]:
+            c = ET.SubElement(addr, "component")
+            c.set("name", name)
+            c.text = value
+
+    buf = io.BytesIO()
+    ET.ElementTree(root).write(buf, encoding="utf-8", xml_declaration=True)
+    return buf.getvalue()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 4a — Save CSV backup (human-readable) + XML feed file
+# ──────────────────────────────────────────────────────────────────────────────
+CSV_FIELDS = [
+    "vehicle_id", "title", "description", "price",
+    "url", "image_url", "year", "make", "model", "trim",
+    "mileage", "exterior_color", "state_of_vehicle",
 ]
 
-def _feed_row(v: Vehicle) -> dict:
-    """Return a row dict in Facebook automotive CSV feed format."""
-    price_str = v.price if v.price else "0 USD"
-    return {
-        "id":             v.vin,
-        "title":          v.title,
-        "description":    v.description,
-        "availability":   "available",
-        "condition":      v.condition,
-        "price":          price_str,
-        "link":           v.link,
-        "image_link":     v.image_url,
-        "year":           v.year,
-        "make":           v.make,
-        "model":          v.model,
-        "trim":           v.trim,
-        "mileage.value":  v.mileage,
-        "mileage.unit":   "MI",
-        "exterior_color": v.exterior_color,
-        "vin":            v.vin,
-        "vehicle_type":   "car_truck",
-        "state_of_vehicle": v.condition,
-    }
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Step 4a — Save CSV backup
-# ──────────────────────────────────────────────────────────────────────────────
 def save_csv(vehicles: list[Vehicle], path: str = CSV_OUTPUT_PATH) -> None:
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=FEED_FIELDS)
+        writer = csv.DictWriter(fh, fieldnames=CSV_FIELDS)
         writer.writeheader()
         for v in vehicles:
-            row = _feed_row(v)
-            writer.writerow({k: (row.get(k) or "") for k in FEED_FIELDS})
+            writer.writerow({
+                "vehicle_id":      v.vin,
+                "title":           v.title,
+                "description":     v.description,
+                "price":           _price_to_decimal_str(v.price),
+                "url":             v.link,
+                "image_url":       v.image_url,
+                "year":            v.year,
+                "make":            v.make,
+                "model":           v.model,
+                "trim":            v.trim,
+                "mileage":         v.mileage,
+                "exterior_color":  v.exterior_color,
+                "state_of_vehicle": v.condition.upper(),
+            })
     print(f"[CSV] Saved {len(vehicles)} vehicles → {path}", flush=True)
 
 
@@ -594,20 +643,14 @@ def upload_to_facebook(vehicles: list[Vehicle]) -> bool:
         print(f"  [FB] Could not get/create feed: {exc}", flush=True)
         return False
 
-    # Build CSV in memory using the automotive feed field names
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=FEED_FIELDS)
-    writer.writeheader()
-    for v in vehicles:
-        row = _feed_row(v)
-        writer.writerow({k: (row.get(k) or "") for k in FEED_FIELDS})
-    csv_bytes = buf.getvalue().encode("utf-8")
+    # Build XML feed in the format Facebook's template specifies
+    xml_bytes = build_xml_feed(vehicles)
 
-    # Upload the CSV to the feed
+    # Upload the XML to the feed
     endpoint = f"https://graph.facebook.com/{FB_API_VERSION}/{feed_id}/uploads"
     resp = requests.post(
         endpoint,
-        files={"file": ("inventory.csv", csv_bytes, "text/csv")},
+        files={"file": ("inventory.xml", xml_bytes, "text/xml")},
         data={"access_token": FB_ACCESS_TOKEN},
         timeout=120,
     )
