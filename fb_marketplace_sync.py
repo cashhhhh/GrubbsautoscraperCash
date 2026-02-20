@@ -95,6 +95,7 @@ class Vehicle:
     description:    str = ""
     price:          Optional[str] = None   # "24995 USD"
     condition:      str = "used"           # "new" or "used"
+    body_style:     str = ""               # inferred; see _infer_body_style()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -409,6 +410,77 @@ def _price_to_decimal_str(price: Optional[str]) -> str:
     return price
 
 
+def _infer_body_style(make: str, model: str, trim: str) -> str:
+    """
+    Infer Facebook body_style enum from make/model/trim.
+    Accepted values: CONVERTIBLE, COUPE, CROSSOVER, HATCHBACK,
+                     MINIVAN, SEDAN, SUV, TRUCK, VAN, WAGON, OTHER
+    """
+    text = f"{make} {model} {trim}".upper()
+
+    # Trucks
+    if any(x in text for x in [
+        "F-150", "F150", "F-250", "F250", "F-350", "F350",
+        "SILVERADO", "SIERRA", " RAM ", "TUNDRA", "TACOMA",
+        "COLORADO", "CANYON", "FRONTIER", "RANGER", "RIDGELINE",
+        "TITAN", "AVALANCHE", "DAKOTA",
+    ]):
+        return "TRUCK"
+
+    # Minivans
+    if any(x in text for x in [
+        "SIENNA", "ODYSSEY", "PACIFICA", "CARAVAN", "QUEST",
+        "SEDONA", "TOWN & COUNTRY", "TOWN AND COUNTRY",
+    ]):
+        return "MINIVAN"
+
+    # Convertibles
+    if any(x in text for x in ["CONVERT", "CABRIOLET", "ROADSTER", "SPYDER"]):
+        return "CONVERTIBLE"
+
+    # Coupes
+    if any(x in text for x in [
+        " Q60", "MUSTANG", "CAMARO", "CHALLENGER", "CORVETTE",
+        "370Z", "350Z", "86", "BRZ", "RC ", " TT ", "M4", "M2",
+    ]):
+        return "COUPE"
+
+    # Wagons
+    if any(x in text for x in ["WAGON", "ALLROAD", "SPORTBACK", " A4 AVANT", "OUTBACK"]):
+        return "WAGON"
+
+    # Hatchbacks
+    if any(x in text for x in [
+        " GOLF", " POLO", "HATCHBACK", "5-DOOR", "3-DOOR",
+        "FOCUS ST", "FOCUS SE 5", "IMPREZA HATCH",
+    ]):
+        return "HATCHBACK"
+
+    # SUVs / Crossovers — check after trucks/vans to avoid false matches
+    if any(x in text for x in [
+        "QX", "EXPLORER", "EXPEDITION", "NAVIGATOR", "ESCALADE",
+        "SUBURBAN", "TAHOE", "YUKON", "TRAVERSE", "PILOT", "PASSPORT",
+        "PATHFINDER", "ARMADA", "HIGHLANDER", "4RUNNER", "SEQUOIA",
+        "LAND CRUISER", "MDX", "RDX", "ACADIA", "ENCLAVE", "ENVISION",
+        "ATLAS", "TIGUAN", "TOUAREG", "Q7", "Q5", "Q3", "SQ5",
+        "X1", "X3", "X5", "X6", "X7", "GLC", "GLE", "GLS", "ML",
+        "RX", "GX", "LX", "NX", "UX", "CX-5", "CX-7", "CX-9",
+        "CR-V", "HR-V", "PILOT", "ROGUE", "MURANO", "XTERRA",
+        "SANTA FE", "TUCSON", "PALISADE", "TELLURIDE", "SPORTAGE",
+        "SORENTO", "SOUL", "EQUINOX", "TRAX", "BLAZER", "TRAILBLAZER",
+        "COMPASS", "RENEGADE", "WRANGLER", "GRAND CHEROKEE", "CHEROKEE",
+        "EDGE", "ESCAPE", "FLEX", "TERRAIN", "VUE", "CAPTIVA",
+        "4RUNNER", "FJ CRUISER", "RAV4", "VENZA", "CROSSOVER",
+        "GRAND VITARA", "VITARA", "OUTLANDER", "ECLIPSE CROSS",
+        "FORESTER", "CROSSTREK", "ASCENT", "BAJA",
+        " EX35", " FX", " JX", " QX",
+    ]):
+        return "SUV"
+
+    # Default to SEDAN for everything else
+    return "SEDAN"
+
+
 def build_xml_feed(vehicles: list[Vehicle]) -> bytes:
     """Return a Facebook automotive XML feed as UTF-8 bytes."""
     root = ET.Element("listings")
@@ -431,9 +503,11 @@ def build_xml_feed(vehicles: list[Vehicle]) -> bytes:
         ET.SubElement(mil, "unit").text  = "MI"
         ET.SubElement(mil, "value").text = v.mileage if v.mileage else "0"
 
-        ET.SubElement(listing, "state_of_vehicle").text = v.condition.upper()
-        ET.SubElement(listing, "make").text             = v.make
-        ET.SubElement(listing, "model").text            = v.model
+        body = v.body_style or _infer_body_style(v.make, v.model, v.trim)
+        ET.SubElement(listing, "body_style").text        = body
+        ET.SubElement(listing, "state_of_vehicle").text  = v.condition.upper()
+        ET.SubElement(listing, "make").text              = v.make
+        ET.SubElement(listing, "model").text             = v.model
         if v.year:
             ET.SubElement(listing, "year").text = v.year
         if v.trim:
