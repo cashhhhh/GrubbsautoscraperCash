@@ -469,15 +469,21 @@ def resolve_catalog_id() -> str:
             timeout=15,
         )
         data = r.json()
-        for biz in data.get("data", []):
-            cats = (biz.get("owned_product_catalogs") or {}).get("data", [])
-            if cats:
-                cat = cats[0]
-                print(f"[FB] Auto-detected catalog: {cat['name']} (id={cat['id']})", flush=True)
-                print(f"[FB] Tip: set FB_CATALOG_ID={cat['id']} in .env to skip this lookup.", flush=True)
-                return cat["id"]
-    except Exception:
-        pass
+        if "error" in data:
+            print(f"[FB] businesses API error: {data['error'].get('message')}", flush=True)
+        else:
+            bizzes = data.get("data", [])
+            print(f"[FB] Found {len(bizzes)} business(es) on this token.", flush=True)
+            for biz in bizzes:
+                cats = (biz.get("owned_product_catalogs") or {}).get("data", [])
+                print(f"[FB]   Biz '{biz.get('name')}' → {len(cats)} catalog(s)", flush=True)
+                if cats:
+                    cat = cats[0]
+                    print(f"[FB] Auto-detected catalog: {cat['name']} (id={cat['id']})", flush=True)
+                    print(f"[FB] Tip: set FB_CATALOG_ID={cat['id']} in .env to skip this lookup.", flush=True)
+                    return cat["id"]
+    except Exception as exc:
+        print(f"[FB] businesses API exception: {exc}", flush=True)
 
     # Fallback: catalogs directly on the token (system-user tokens)
     try:
@@ -486,14 +492,18 @@ def resolve_catalog_id() -> str:
             timeout=15,
         )
         data = r.json()
-        cats = data.get("data", [])
-        if cats:
-            cat = cats[0]
-            print(f"[FB] Auto-detected catalog: {cat['name']} (id={cat['id']})", flush=True)
-            print(f"[FB] Tip: set FB_CATALOG_ID={cat['id']} in .env to skip this lookup.", flush=True)
-            return cat["id"]
-    except Exception:
-        pass
+        if "error" in data:
+            print(f"[FB] product_catalogs API error: {data['error'].get('message')}", flush=True)
+        else:
+            cats = data.get("data", [])
+            print(f"[FB] product_catalogs fallback: found {len(cats)} catalog(s).", flush=True)
+            if cats:
+                cat = cats[0]
+                print(f"[FB] Auto-detected catalog: {cat['name']} (id={cat['id']})", flush=True)
+                print(f"[FB] Tip: set FB_CATALOG_ID={cat['id']} in .env to skip this lookup.", flush=True)
+                return cat["id"]
+    except Exception as exc:
+        print(f"[FB] product_catalogs API exception: {exc}", flush=True)
 
     print("[FB] Could not auto-detect catalog ID. Set FB_CATALOG_ID in .env manually.", flush=True)
     return ""
