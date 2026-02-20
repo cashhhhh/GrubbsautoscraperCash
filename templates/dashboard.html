@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grubbs INFINITI — Marketplace Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            sidebar: '#08111F',
+            'sidebar-hover': '#0f2038',
+            fb: '#1877F2',
+            'fb-dark': '#0d5fcf',
+          },
+          fontFamily: { sans: ['Inter','system-ui','sans-serif'] },
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    [x-cloak]{display:none!important}
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:#f1f5f9}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+    ::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+    .nav-item{@apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-400 text-sm font-medium transition-all cursor-pointer select-none}
+    .nav-item:hover{@apply bg-sidebar-hover text-white}
+    .nav-item.active{@apply bg-fb/15 text-fb border-l-2 border-fb -ml-0.5}
+    .stat-card{@apply bg-white rounded-2xl p-5 shadow-sm border border-slate-100 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md}
+    .badge{@apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold}
+    .btn{@apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all}
+    .btn-primary{@apply btn bg-fb text-white hover:bg-fb-dark shadow-sm}
+    .btn-ghost{@apply btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50}
+    .pulse-dot{@apply h-2 w-2 rounded-full}
+    @keyframes spin-slow{to{transform:rotate(360deg)}}
+    .spin-slow{animation:spin-slow 2s linear infinite}
+  </style>
+</head>
+
+<body class="h-full bg-slate-100 font-sans text-slate-800"
+  x-data="dashboard()"
+  x-init="init()"
+  x-cloak>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  LAYOUT SHELL                                                           -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="flex h-full min-h-screen">
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────────────────────── -->
+  <aside class="w-60 shrink-0 bg-sidebar flex flex-col fixed inset-y-0 z-30 shadow-xl">
+
+    <!-- Logo -->
+    <div class="px-5 pt-6 pb-4 border-b border-white/10">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 bg-fb rounded-xl flex items-center justify-center shadow">
+          <!-- FB icon -->
+          <svg class="w-5 h-5 text-white fill-current" viewBox="0 0 24 24"><path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.791-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.887v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+        </div>
+        <div>
+          <p class="text-white text-sm font-bold leading-tight">Grubbs INFINITI</p>
+          <p class="text-slate-400 text-xs">San Antonio</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider px-4 mb-2">Menu</p>
+      <div class="nav-item" :class="tab==='inventory'&&'active'" @click="tab='inventory'">
+        <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 20 20"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2zm0 6a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z"/></svg>
+        Inventory
+      </div>
+      <div class="nav-item" :class="tab==='analytics'&&'active'" @click="tab='analytics'">
+        <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+        Analytics
+      </div>
+      <div class="nav-item" :class="tab==='history'&&'active'" @click="tab='history'">
+        <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+        Sync History
+      </div>
+
+      <div class="my-3 border-t border-white/10"></div>
+      <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider px-4 mb-2">Actions</p>
+
+      <!-- Sync Now -->
+      <button class="nav-item w-full text-left"
+        :disabled="syncRunning"
+        @click="triggerSync()">
+        <svg class="w-4 h-4 shrink-0 fill-current" :class="syncRunning&&'spin-slow'" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+        </svg>
+        <span x-text="syncRunning ? 'Syncing…' : 'Sync Now'"></span>
+      </button>
+
+      <!-- Refresh FB Stats -->
+      <button class="nav-item w-full text-left"
+        :disabled="statsRunning"
+        @click="refreshStats()">
+        <svg class="w-4 h-4 shrink-0 fill-current" :class="statsRunning&&'spin-slow'" viewBox="0 0 20 20">
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+        </svg>
+        <span x-text="statsRunning ? 'Fetching…' : 'Refresh FB Stats'"></span>
+      </button>
+    </nav>
+
+    <!-- Bottom status + settings gear -->
+    <div class="p-4 border-t border-white/10 space-y-2">
+      <div class="text-xs text-slate-500 space-y-1">
+        <div class="flex items-center gap-2">
+          <span class="pulse-dot" :class="summary.last_sync_ok ? 'bg-emerald-400' : 'bg-red-400'"></span>
+          <span x-text="summary.last_sync_at ? 'Last sync: ' + fmtDate(summary.last_sync_at) : 'No syncs yet'"></span>
+        </div>
+        <div x-show="summary.addendum_amount > 0" class="text-amber-400 font-semibold">
+          Addendum: $<span x-text="fmt(summary.addendum_amount)"></span>
+        </div>
+      </div>
+      <!-- Settings button -->
+      <button class="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-sidebar-hover text-xs font-medium transition-all"
+        @click="settingsOpen=true">
+        <svg class="w-4 h-4 fill-current shrink-0" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        Settings
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ────────────────────────────────────────────────────────────── -->
+  <main class="flex-1 ml-60 flex flex-col min-h-screen">
+
+    <!-- Top bar -->
+    <header class="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-slate-200 px-8 py-3 flex items-center justify-between">
+      <div>
+        <h1 class="text-base font-bold text-slate-900" x-text="tabLabel()"></h1>
+        <p class="text-xs text-slate-500" x-text="summary.total_active + ' vehicles active · stats as of ' + (summary.stats_date || 'never')"></p>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- Status pill -->
+        <template x-if="statusMsg">
+          <span class="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-600" x-text="statusMsg"></span>
+        </template>
+        <span class="text-xs text-slate-400" x-text="'Updated ' + lastRefreshed"></span>
+        <button class="btn-ghost text-xs" @click="reload()">
+          <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <div class="flex-1 p-8 space-y-6 overflow-x-hidden">
+
+      <!-- ══ STAT CARDS ═════════════════════════════════════════════════════ -->
+      <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
+
+        <!-- Active Listings -->
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Active Listings</p>
+              <p class="text-3xl font-extrabold text-slate-900 mt-1" x-text="summary.total_active ?? '—'"></p>
+              <p class="text-xs text-slate-400 mt-1">
+                <span class="text-emerald-600 font-semibold" x-text="summary.total_priced"></span> priced ·
+                <span class="text-amber-600 font-semibold" x-text="summary.total_no_price"></span> missing price
+              </p>
+            </div>
+            <div class="w-10 h-10 bg-fb/10 rounded-xl flex items-center justify-center">
+              <svg class="w-5 h-5 text-fb fill-current" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Avg Price w/ Addendum -->
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Avg Price</p>
+              <p class="text-3xl font-extrabold text-slate-900 mt-1">$<span x-text="fmt(summary.avg_price)"></span></p>
+              <p class="text-xs text-slate-400 mt-1" x-show="summary.addendum_amount > 0">
+                w/ addendum: <span class="text-amber-600 font-semibold">$<span x-text="fmt(summary.avg_price_with_addendum)"></span></span>
+              </p>
+              <p class="text-xs text-slate-400 mt-1" x-show="!summary.addendum_amount">internet price avg</p>
+            </div>
+            <div class="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+              <svg class="w-5 h-5 text-emerald-500 fill-current" viewBox="0 0 20 20"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.028 2.353 1.118V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.028-2.354-1.118V5z" clip-rule="evenodd"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- FB Clicks -->
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">FB Clicks</p>
+              <p class="text-3xl font-extrabold text-slate-900 mt-1" x-text="summary.total_clicks ?? '—'"></p>
+              <p class="text-xs text-slate-400 mt-1">
+                <span class="text-slate-600 font-semibold" x-text="summary.total_saves"></span> saves ·
+                <span x-text="summary.stats_date ? 'as of ' + summary.stats_date : 'no data yet'"></span>
+              </p>
+            </div>
+            <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+              <svg class="w-5 h-5 text-fb fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6.672 1.911a1 1 0 10-1.932.518l.259.966a1 1 0 001.932-.518l-.26-.966zM2.429 4.74a1 1 0 10-.517 1.932l.966.259a1 1 0 00.517-1.932l-.966-.26zm8.814-.569a1 1 0 00-1.415-1.414l-.707.707a1 1 0 101.415 1.415l.707-.708zm-7.071 7.072l.707-.707A1 1 0 003.465 9.12l-.708.707a1 1 0 001.415 1.415zm3.2-5.171a1 1 0 00-1.3 1.3l4 10a1 1 0 001.823.075l1.38-2.759 3.018 3.02a1 1 0 001.414-1.415l-3.019-3.02 2.76-1.379a1 1 0 00-.076-1.822l-10-4z" clip-rule="evenodd"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- FB Impressions -->
+        <div class="stat-card">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Impressions</p>
+              <p class="text-3xl font-extrabold text-slate-900 mt-1" x-text="fmtBig(summary.total_impressions)"></p>
+              <p class="text-xs text-slate-400 mt-1">
+                CTR: <span class="font-semibold text-slate-600" x-text="ctr()"></span>
+              </p>
+            </div>
+            <div class="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center">
+              <svg class="w-5 h-5 text-violet-500 fill-current" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ INVENTORY TAB ══════════════════════════════════════════════════ -->
+      <div x-show="tab==='inventory'" x-cloak>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-wrap gap-3 items-end">
+          <!-- Search -->
+          <div class="flex-1 min-w-48">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Search</label>
+            <div class="relative">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+              <input x-model="filters.search" @input.debounce.400ms="loadVehicles()"
+                placeholder="VIN, stock #, model…"
+                class="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+            </div>
+          </div>
+          <!-- Make -->
+          <div class="min-w-36">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Make</label>
+            <select x-model="filters.make" @change="loadVehicles()"
+              class="w-full py-2 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb">
+              <option value="">All Makes</option>
+              <template x-for="m in makes" :key="m">
+                <option :value="m" x-text="m"></option>
+              </template>
+            </select>
+          </div>
+          <!-- Year -->
+          <div class="min-w-28">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Year</label>
+            <select x-model="filters.year" @change="loadVehicles()"
+              class="w-full py-2 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb">
+              <option value="">All Years</option>
+              <template x-for="y in years" :key="y">
+                <option :value="y" x-text="y"></option>
+              </template>
+            </select>
+          </div>
+          <!-- Condition -->
+          <div class="min-w-32">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Condition</label>
+            <select x-model="filters.condition" @change="loadVehicles()"
+              class="w-full py-2 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb">
+              <option value="">All</option>
+              <option value="used">Used</option>
+              <option value="new">New</option>
+            </select>
+          </div>
+          <!-- Body Style -->
+          <div class="min-w-36">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Body Style</label>
+            <select x-model="filters.body_style" @change="loadVehicles()"
+              class="w-full py-2 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb">
+              <option value="">All Styles</option>
+              <template x-for="bs in bodyStyles" :key="bs">
+                <option :value="bs" x-text="bs"></option>
+              </template>
+            </select>
+          </div>
+          <!-- Clear -->
+          <button class="btn-ghost text-xs" @click="clearFilters()">Clear</button>
+          <!-- Count -->
+          <span class="text-xs text-slate-400 ml-auto self-center" x-text="vehicles.length + ' results'"></span>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <!-- Loading skeleton -->
+          <div x-show="loading" class="p-8 text-center text-slate-400 text-sm animate-pulse">Loading inventory…</div>
+
+          <div x-show="!loading" class="table-container">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-100">
+                  <th class="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">Photo</th>
+                  <th class="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Vehicle</th>
+                  <th class="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Stock / VIN</th>
+                  <th class="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Style</th>
+                  <th class="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Mileage</th>
+                  <th class="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Internet Price</th>
+                  <th class="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">w/ Addendum</th>
+                  <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">% Market</th>
+                  <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">FB Clicks</th>
+                  <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Impressions</th>
+                  <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Saves</th>
+                  <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th class="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Links</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-50">
+                <template x-if="vehicles.length === 0">
+                  <tr><td colspan="13" class="py-12 text-center text-slate-400 text-sm">No vehicles match your filters.</td></tr>
+                </template>
+                <template x-for="v in vehicles" :key="v.vin">
+                  <tr class="hover:bg-blue-50/40 transition-colors cursor-default group"
+                      @click="openModal(v)">
+                    <!-- Thumb -->
+                    <td class="px-3 py-2.5">
+                      <div class="w-14 h-10 rounded-lg overflow-hidden bg-slate-100 shrink-0">
+                        <img x-show="v.image_url" :src="v.image_url" :alt="v.title"
+                          class="w-full h-full object-cover"
+                          @error="$el.style.display='none'" loading="lazy" />
+                      </div>
+                    </td>
+                    <!-- Vehicle -->
+                    <td class="px-3 py-2.5">
+                      <p class="font-semibold text-slate-900 text-xs leading-tight" x-text="v.year + ' ' + v.make + ' ' + v.model"></p>
+                      <p class="text-slate-400 text-xs leading-tight" x-text="v.trim || '—'"></p>
+                      <p class="text-slate-400 text-xs leading-tight" x-text="v.exterior_color || ''"></p>
+                    </td>
+                    <!-- Stock / VIN -->
+                    <td class="px-3 py-2.5">
+                      <p class="font-mono text-xs text-slate-700" x-text="v.stock_number || '—'"></p>
+                      <p class="font-mono text-xs text-slate-400" x-text="v.vin"></p>
+                    </td>
+                    <!-- Body Style -->
+                    <td class="px-3 py-2.5">
+                      <span class="badge"
+                        :class="bodyBadge(v.body_style)"
+                        x-text="v.body_style || '?'"></span>
+                      <p class="text-xs text-slate-400 mt-0.5" x-text="v.condition"></p>
+                    </td>
+                    <!-- Mileage -->
+                    <td class="px-3 py-2.5 text-right font-mono text-xs text-slate-700" x-text="v.mileage ? fmt(v.mileage) + ' mi' : '—'"></td>
+                    <!-- Internet Price -->
+                    <td class="px-3 py-2.5 text-right">
+                      <template x-if="v.price_ok">
+                        <div>
+                          <span class="font-bold text-emerald-700 text-sm">$<span x-text="fmt(v.effective_price)"></span></span>
+                          <template x-if="v.price_overridden">
+                            <span class="block badge bg-amber-100 text-amber-700 mt-0.5">Edited</span>
+                          </template>
+                        </div>
+                      </template>
+                      <template x-if="!v.price_ok">
+                        <span class="badge bg-red-100 text-red-700">No Price</span>
+                      </template>
+                    </td>
+                    <!-- w/ Addendum -->
+                    <td class="px-3 py-2.5 text-right">
+                      <template x-if="v.price_with_addendum && v.effective_addendum > 0">
+                        <div>
+                          <span class="font-bold text-amber-700 text-sm">$<span x-text="fmt(v.price_with_addendum)"></span></span>
+                          <p class="text-xs text-amber-500">+$<span x-text="fmt(v.effective_addendum)"></span></p>
+                        </div>
+                      </template>
+                      <template x-if="!v.effective_addendum || v.effective_addendum === 0">
+                        <span class="text-xs text-slate-300">—</span>
+                      </template>
+                      <template x-if="v.effective_addendum > 0 && !v.price_with_addendum">
+                        <span class="text-xs text-slate-300">—</span>
+                      </template>
+                    </td>
+                    <!-- % to Market -->
+                    <td class="px-3 py-2.5 text-center">
+                      <template x-if="v.pct_to_market !== null && v.pct_to_market !== undefined">
+                        <span class="badge font-mono"
+                          :class="v.pct_to_market > 5 ? 'bg-red-100 text-red-700' : v.pct_to_market < -5 ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'"
+                          x-text="(v.pct_to_market > 0 ? '+' : '') + v.pct_to_market.toFixed(1) + '%'"></span>
+                      </template>
+                      <template x-if="v.pct_to_market === null || v.pct_to_market === undefined">
+                        <button class="text-xs text-slate-300 hover:text-fb transition-colors" @click.stop="openModal(v,'edit')">Set&nbsp;MV</button>
+                      </template>
+                    </td>
+                    <!-- Clicks -->
+                    <td class="px-3 py-2.5 text-center">
+                      <span class="font-semibold text-fb text-sm" x-text="v.fb_clicks"></span>
+                    </td>
+                    <!-- Impressions -->
+                    <td class="px-3 py-2.5 text-center">
+                      <span class="font-semibold text-violet-600 text-sm" x-text="fmtBig(v.fb_impressions)"></span>
+                    </td>
+                    <!-- Saves -->
+                    <td class="px-3 py-2.5 text-center">
+                      <span class="text-slate-600 text-sm" x-text="v.fb_saves"></span>
+                    </td>
+                    <!-- Status -->
+                    <td class="px-3 py-2.5 text-center">
+                      <span class="badge"
+                        :class="v.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'"
+                        x-text="v.is_active ? 'Live' : 'Inactive'"></span>
+                    </td>
+                    <!-- Links -->
+                    <td class="px-3 py-2.5" @click.stop>
+                      <div class="flex items-center gap-1.5">
+                        <a x-show="v.link" :href="v.link" target="_blank" rel="noopener"
+                          class="text-xs text-fb hover:underline font-medium">VDP ↗</a>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ ANALYTICS TAB ════════════════════════════════════════════════ -->
+      <div x-show="tab==='analytics'" x-cloak class="space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          <!-- Makes donut -->
+          <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <h3 class="text-sm font-bold text-slate-800 mb-4">Listings by Make</h3>
+            <div class="relative h-52">
+              <canvas id="makeChart"></canvas>
+            </div>
+            <div class="mt-4 space-y-1.5">
+              <template x-for="[make, cnt] in Object.entries(summary.makes_breakdown || {})" :key="make">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-slate-600 font-medium" x-text="make"></span>
+                  <span class="font-bold text-slate-800" x-text="cnt"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Body style donut -->
+          <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <h3 class="text-sm font-bold text-slate-800 mb-4">Listings by Body Style</h3>
+            <div class="relative h-52">
+              <canvas id="bodyChart"></canvas>
+            </div>
+            <div class="mt-4 space-y-1.5">
+              <template x-for="[bs, cnt] in Object.entries(summary.body_breakdown || {})" :key="bs">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-slate-600 font-medium" x-text="bs"></span>
+                  <span class="font-bold text-slate-800" x-text="cnt"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Year breakdown -->
+          <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <h3 class="text-sm font-bold text-slate-800 mb-4">Listings by Year</h3>
+            <div class="relative h-52">
+              <canvas id="yearChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top clicked vehicles -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <h3 class="text-sm font-bold text-slate-800 mb-4">Top Vehicles by FB Clicks</h3>
+          <div class="space-y-3">
+            <template x-if="topClicked.length === 0">
+              <p class="text-sm text-slate-400">No click data yet — click "Refresh FB Stats" to fetch.</p>
+            </template>
+            <template x-for="(v, i) in topClicked" :key="v.vin">
+              <div class="flex items-center gap-4">
+                <span class="text-lg font-extrabold text-slate-200 w-6 text-right" x-text="i+1"></span>
+                <div class="w-12 h-8 rounded overflow-hidden bg-slate-100 shrink-0">
+                  <img x-show="v.image_url" :src="v.image_url" class="w-full h-full object-cover" loading="lazy" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-semibold text-slate-800 truncate" x-text="v.year + ' ' + v.make + ' ' + v.model + ' ' + v.trim"></p>
+                  <p class="text-xs text-slate-400" x-text="v.vin"></p>
+                </div>
+                <div class="text-right shrink-0">
+                  <p class="text-sm font-bold text-fb" x-text="v.fb_clicks + ' clicks'"></p>
+                  <p class="text-xs text-slate-400" x-text="fmtBig(v.fb_impressions) + ' impr.'"></p>
+                </div>
+                <!-- click bar -->
+                <div class="w-24 h-2 bg-slate-100 rounded-full overflow-hidden shrink-0">
+                  <div class="h-full bg-fb rounded-full" :style="'width:' + Math.min(100, topClicked[0].fb_clicks ? (v.fb_clicks/topClicked[0].fb_clicks*100) : 0) + '%'"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Price range histogram -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <h3 class="text-sm font-bold text-slate-800 mb-4">Price Distribution</h3>
+          <div class="relative h-40">
+            <canvas id="priceChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ HISTORY TAB ══════════════════════════════════════════════════ -->
+      <div x-show="tab==='history'" x-cloak>
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-100">
+                <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">#</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date / Time</th>
+                <th class="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Found</th>
+                <th class="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Priced</th>
+                <th class="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Uploaded</th>
+                <th class="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Duration</th>
+                <th class="px-5 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Result</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <template x-if="syncRuns.length === 0">
+                <tr><td colspan="7" class="py-10 text-center text-slate-400 text-sm">No sync runs recorded yet.</td></tr>
+              </template>
+              <template x-for="r in syncRuns" :key="r.id">
+                <tr class="hover:bg-slate-50 transition-colors">
+                  <td class="px-5 py-3 text-slate-400 text-xs font-mono" x-text="r.id"></td>
+                  <td class="px-5 py-3 text-xs" x-text="fmtDate(r.run_at)"></td>
+                  <td class="px-5 py-3 text-right font-mono text-xs" x-text="r.vehicles_found"></td>
+                  <td class="px-5 py-3 text-right font-mono text-xs" x-text="r.vehicles_priced"></td>
+                  <td class="px-5 py-3 text-right font-mono text-xs" x-text="r.vehicles_uploaded"></td>
+                  <td class="px-5 py-3 text-right text-xs text-slate-500" x-text="r.duration_seconds ? r.duration_seconds.toFixed(1) + 's' : '—'"></td>
+                  <td class="px-5 py-3 text-center">
+                    <span class="badge"
+                      :class="r.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'"
+                      x-text="r.success ? '✓ Success' : '✗ Failed'"></span>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /main content -->
+  </main>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- VEHICLE DETAIL MODAL                                                    -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div x-show="modal" x-cloak
+  class="fixed inset-0 z-50 flex items-center justify-center p-4"
+  @keydown.escape.window="modal=null">
+  <!-- backdrop -->
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="modal=null"></div>
+  <!-- panel -->
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col" x-show="modal" x-transition>
+    <!-- header -->
+    <div class="flex items-start gap-4 p-6 border-b border-slate-100">
+      <div class="w-24 h-16 rounded-xl overflow-hidden bg-slate-100 shrink-0">
+        <img x-show="modal?.image_url" :src="modal?.image_url" class="w-full h-full object-cover" loading="lazy" />
+      </div>
+      <div class="flex-1 min-w-0">
+        <h2 class="text-lg font-bold text-slate-900 leading-tight"
+            x-text="modal?.year + ' ' + modal?.make + ' ' + modal?.model + ' ' + (modal?.trim || '')"></h2>
+        <p class="text-xs text-slate-400 mt-1" x-text="modal?.vin"></p>
+        <div class="flex items-center gap-2 mt-2 flex-wrap">
+          <span class="badge"
+            :class="modal?.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'"
+            x-text="modal?.is_active ? 'Live on FB Marketplace' : 'Inactive'"></span>
+          <span class="badge" :class="bodyBadge(modal?.body_style)" x-text="modal?.body_style || '?'"></span>
+          <span class="badge bg-slate-100 text-slate-600" x-text="modal?.condition"></span>
+          <!-- % to market badge -->
+          <template x-if="modal?.pct_to_market !== null && modal?.pct_to_market !== undefined">
+            <span class="badge font-mono"
+              :class="modal.pct_to_market > 5 ? 'bg-red-100 text-red-700' : modal.pct_to_market < -5 ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'"
+              x-text="(modal.pct_to_market > 0 ? '+' : '') + modal.pct_to_market.toFixed(1) + '% vs market'"></span>
+          </template>
+        </div>
+      </div>
+      <button @click="modal=null" class="text-slate-400 hover:text-slate-700 transition-colors shrink-0">
+        <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+
+    <!-- Modal Tabs -->
+    <div class="flex border-b border-slate-100 px-6">
+      <button class="py-3 px-4 text-xs font-semibold border-b-2 transition-all mr-1"
+        :class="modalTab==='details' ? 'border-fb text-fb' : 'border-transparent text-slate-400 hover:text-slate-700'"
+        @click="modalTab='details'">Details</button>
+      <button class="py-3 px-4 text-xs font-semibold border-b-2 transition-all mr-1"
+        :class="modalTab==='edit' ? 'border-fb text-fb' : 'border-transparent text-slate-400 hover:text-slate-700'"
+        @click="modalTab='edit'">Edit / Pricing</button>
+      <button class="py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5"
+        :class="modalTab==='comps' ? 'border-fb text-fb' : 'border-transparent text-slate-400 hover:text-slate-700'"
+        @click="modalTab='comps'; loadComparables()">
+        Comparables
+        <span x-show="comparables.length > 0" class="badge bg-slate-200 text-slate-600 text-xs" x-text="comparables.length"></span>
+      </button>
+    </div>
+
+    <!-- ── DETAILS TAB ── -->
+    <div x-show="modalTab==='details'" class="overflow-y-auto p-6 space-y-5 text-sm">
+      <!-- Price block -->
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-slate-50 rounded-xl p-3 text-center">
+          <p class="text-xs text-slate-500 font-semibold">Effective Price</p>
+          <template x-if="modal?.price_ok">
+            <div>
+              <p class="text-lg font-extrabold text-emerald-700 mt-1">$<span x-text="fmt(modal?.effective_price)"></span></p>
+              <template x-if="modal?.price_overridden">
+                <p class="text-xs text-amber-600 mt-0.5">Override (feed: $<span x-text="fmt(modal?.price_dollars)"></span>)</p>
+              </template>
+            </div>
+          </template>
+          <template x-if="!modal?.price_ok">
+            <p class="text-lg font-extrabold text-red-500 mt-1">Not Found</p>
+          </template>
+        </div>
+        <div class="bg-amber-50 rounded-xl p-3 text-center" x-show="modal?.effective_addendum > 0">
+          <p class="text-xs text-amber-600 font-semibold">Addendum<span x-show="modal?.addendum_overridden"> (custom)</span></p>
+          <p class="text-lg font-extrabold text-amber-700 mt-1">+$<span x-text="fmt(modal?.effective_addendum)"></span></p>
+        </div>
+        <div class="bg-slate-800 rounded-xl p-3 text-center" x-show="modal?.effective_addendum > 0 && modal?.price_ok">
+          <p class="text-xs text-slate-400 font-semibold">Customer Price</p>
+          <p class="text-lg font-extrabold text-white mt-1">$<span x-text="fmt(modal?.price_with_addendum)"></span></p>
+        </div>
+      </div>
+      <!-- Market value row -->
+      <template x-if="modal?.market_value">
+        <div class="bg-slate-50 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500">Market Value (KBB / Reference)</p>
+            <p class="text-base font-bold text-slate-800 mt-0.5">$<span x-text="fmt(modal?.market_value)"></span></p>
+          </div>
+          <template x-if="modal?.pct_to_market !== null && modal?.pct_to_market !== undefined">
+            <span class="badge text-base px-3 py-1"
+              :class="modal.pct_to_market > 5 ? 'bg-red-100 text-red-700' : modal.pct_to_market < -5 ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'"
+              x-text="(modal.pct_to_market > 0 ? '+' : '') + modal.pct_to_market.toFixed(1) + '%'"></span>
+          </template>
+        </div>
+      </template>
+      <!-- Details grid -->
+      <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+        <div><span class="text-slate-500">Stock #</span><span class="float-right font-semibold" x-text="modal?.stock_number || '—'"></span></div>
+        <div><span class="text-slate-500">Mileage</span><span class="float-right font-semibold" x-text="modal?.mileage ? fmt(modal.mileage) + ' mi' : '—'"></span></div>
+        <div><span class="text-slate-500">Color</span><span class="float-right font-semibold" x-text="modal?.exterior_color || '—'"></span></div>
+        <div><span class="text-slate-500">Body Style</span><span class="float-right font-semibold" x-text="modal?.body_style || '—'"></span></div>
+        <div><span class="text-slate-500">Condition</span><span class="float-right font-semibold capitalize" x-text="modal?.condition || '—'"></span></div>
+        <div><span class="text-slate-500">First Seen</span><span class="float-right font-semibold" x-text="modal?.first_seen ? fmtDate(modal.first_seen) : '—'"></span></div>
+        <div><span class="text-slate-500">Last Seen</span><span class="float-right font-semibold" x-text="modal?.last_seen ? fmtDate(modal.last_seen) : '—'"></span></div>
+      </div>
+      <!-- Notes display -->
+      <template x-if="modal?.notes">
+        <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+          <p class="text-xs font-semibold text-yellow-700 mb-1">Internal Notes</p>
+          <p class="text-xs text-slate-700" x-text="modal.notes"></p>
+        </div>
+      </template>
+      <!-- FB Stats -->
+      <div class="bg-fb/5 rounded-xl p-4">
+        <p class="text-xs font-bold text-fb mb-3">Facebook Marketplace Performance</p>
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div>
+            <p class="text-2xl font-extrabold text-fb" x-text="modal?.fb_clicks ?? 0"></p>
+            <p class="text-xs text-slate-500 mt-0.5">Clicks</p>
+          </div>
+          <div>
+            <p class="text-2xl font-extrabold text-violet-600" x-text="fmtBig(modal?.fb_impressions ?? 0)"></p>
+            <p class="text-xs text-slate-500 mt-0.5">Impressions</p>
+          </div>
+          <div>
+            <p class="text-2xl font-extrabold text-slate-700" x-text="modal?.fb_saves ?? 0"></p>
+            <p class="text-xs text-slate-500 mt-0.5">Saves</p>
+          </div>
+        </div>
+        <p class="text-xs text-slate-400 text-center mt-2" x-text="modal?.stats_date ? 'Stats as of ' + modal.stats_date : 'No stats yet — click Refresh FB Stats'"></p>
+      </div>
+      <div class="flex gap-3">
+        <a x-show="modal?.link" :href="modal?.link" target="_blank" rel="noopener"
+          class="btn-primary text-xs flex-1 justify-center">View VDP ↗</a>
+      </div>
+    </div>
+
+    <!-- ── EDIT TAB ── -->
+    <div x-show="modalTab==='edit'" class="overflow-y-auto p-6 space-y-5 text-sm">
+      <p class="text-xs text-slate-400">Changes save immediately and persist across syncs. Clear a field to revert to the default.</p>
+
+      <!-- Override Price -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Override Price <span class="text-slate-400 font-normal">(leave blank to use feed price: $<span x-text="fmt(modal?.price_dollars)"></span>)</span></label>
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+            <input type="number" min="0" step="1" x-model="editForm.price_override"
+              placeholder="e.g. 27500"
+              class="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          </div>
+          <button class="btn-ghost text-xs" @click="editForm.price_override=''; saveVehicle({clear_price:true})">Clear</button>
+        </div>
+      </div>
+
+      <!-- Market Value -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Market Value <span class="text-slate-400 font-normal">(KBB, MMR, or your reference price)</span></label>
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+            <input type="number" min="0" step="1" x-model="editForm.market_value"
+              placeholder="e.g. 26000"
+              class="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          </div>
+          <button class="btn-ghost text-xs" @click="editForm.market_value=''; saveVehicle({clear_market_value:true})">Clear</button>
+        </div>
+        <template x-if="editForm.market_value && editForm.price_override">
+          <p class="text-xs mt-1.5"
+            :class="((editForm.price_override - editForm.market_value)/editForm.market_value*100) > 5 ? 'text-red-600' : ((editForm.price_override - editForm.market_value)/editForm.market_value*100) < -5 ? 'text-emerald-600' : 'text-yellow-600'"
+            x-text="'Preview: ' + (((editForm.price_override - editForm.market_value)/editForm.market_value*100) > 0 ? '+' : '') + ((editForm.price_override - editForm.market_value)/editForm.market_value*100).toFixed(1) + '% vs market'"></p>
+        </template>
+      </div>
+
+      <!-- Addendum Override -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Addendum Override <span class="text-slate-400 font-normal">(leave blank to use global: $<span x-text="fmt(settings.addendum_amount)"></span>)</span></label>
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+            <input type="number" min="0" step="1" x-model="editForm.addendum_override"
+              placeholder="e.g. 1995"
+              class="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          </div>
+          <button class="btn-ghost text-xs" @click="editForm.addendum_override=''; saveVehicle({clear_addendum:true})">Clear</button>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Internal Notes</label>
+        <textarea x-model="editForm.notes" rows="3" placeholder="e.g. Certified, flood check done, price negotiated with wholesaler…"
+          class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb resize-none"></textarea>
+      </div>
+
+      <!-- Save / status -->
+      <div class="flex items-center gap-3">
+        <button class="btn-primary text-xs" @click="saveVehicle()" :disabled="savingVehicle">
+          <span x-show="!savingVehicle">Save Changes</span>
+          <span x-show="savingVehicle">Saving…</span>
+        </button>
+        <span x-show="saveMsg" class="text-xs text-emerald-600 font-semibold" x-text="saveMsg"></span>
+      </div>
+    </div>
+
+    <!-- ── COMPARABLES TAB ── -->
+    <div x-show="modalTab==='comps'" class="overflow-y-auto p-6 space-y-4 text-sm">
+      <div x-show="loadingComps" class="text-center text-slate-400 text-xs py-6 animate-pulse">Loading comparables…</div>
+      <div x-show="!loadingComps && comparables.length === 0" class="text-center text-slate-400 text-xs py-6">
+        No other active listings with the same make &amp; model found.
+      </div>
+      <template x-if="!loadingComps && comparables.length > 0">
+        <div>
+          <p class="text-xs text-slate-400 mb-3">
+            Other <strong x-text="modal?.make + ' ' + modal?.model"></strong> listings in your active catalog within ±4 years.
+          </p>
+          <div class="space-y-2">
+            <template x-for="c in comparables" :key="c.vin">
+              <div class="flex items-center gap-3 p-3 rounded-xl border"
+                :class="c.is_near_duplicate ? 'border-amber-300 bg-amber-50' : 'border-slate-100 bg-slate-50'">
+                <!-- thumb -->
+                <div class="w-14 h-10 rounded-lg overflow-hidden bg-slate-200 shrink-0">
+                  <img x-show="c.image_url" :src="c.image_url" class="w-full h-full object-cover" loading="lazy" />
+                </div>
+                <!-- info -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <p class="text-xs font-semibold text-slate-800" x-text="c.year + ' ' + c.make + ' ' + c.model + (c.trim ? ' ' + c.trim : '')"></p>
+                    <template x-if="c.is_near_duplicate">
+                      <span class="badge bg-amber-200 text-amber-800">⚠ Near Duplicate</span>
+                    </template>
+                  </div>
+                  <p class="text-xs text-slate-400" x-text="(c.mileage ? Number(c.mileage).toLocaleString() + ' mi · ' : '') + (c.exterior_color || '')"></p>
+                </div>
+                <!-- price -->
+                <div class="text-right shrink-0">
+                  <template x-if="c.effective_price">
+                    <p class="text-sm font-bold text-emerald-700">$<span x-text="Number(c.effective_price).toLocaleString()"></span></p>
+                  </template>
+                  <template x-if="!c.effective_price">
+                    <p class="text-xs text-slate-400">No price</p>
+                  </template>
+                  <!-- diff vs current -->
+                  <template x-if="c.effective_price && modal?.effective_price">
+                    <p class="text-xs"
+                      :class="((c.effective_price - modal.effective_price)/modal.effective_price*100) > 0 ? 'text-slate-500' : 'text-emerald-600'"
+                      x-text="(((c.effective_price - modal.effective_price)/modal.effective_price*100) > 0 ? '+' : '') + ((c.effective_price - modal.effective_price)/modal.effective_price*100).toFixed(1) + '% vs this'"></p>
+                  </template>
+                </div>
+                <a :href="c.link" target="_blank" rel="noopener" x-show="c.link" class="text-xs text-fb hover:underline shrink-0">VDP ↗</a>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- SETTINGS MODAL                                                          -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div x-show="settingsOpen" x-cloak
+  class="fixed inset-0 z-50 flex items-center justify-center p-4"
+  @keydown.escape.window="settingsOpen=false">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="settingsOpen=false"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" x-transition>
+    <div class="flex items-center justify-between p-6 border-b border-slate-100">
+      <h2 class="text-base font-bold text-slate-900">Dashboard Settings</h2>
+      <button @click="settingsOpen=false" class="text-slate-400 hover:text-slate-700">
+        <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+    <div class="p-6 space-y-5">
+      <!-- Global addendum -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Global Addendum Amount</label>
+        <p class="text-xs text-slate-400 mb-2">Applied to all vehicles unless overridden per-vehicle. Set to 0 to disable.</p>
+        <div class="flex gap-3 items-center">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+            <input type="number" min="0" step="1" x-model="settings.addendum_amount"
+              class="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          </div>
+          <button class="btn-primary text-sm" @click="saveSettings()" :disabled="savingSettings">
+            <span x-show="!savingSettings">Save</span>
+            <span x-show="savingSettings">Saving…</span>
+          </button>
+        </div>
+        <p x-show="settingsSaveMsg" class="text-xs text-emerald-600 font-semibold mt-2" x-text="settingsSaveMsg"></p>
+      </div>
+      <!-- Info -->
+      <div class="bg-slate-50 rounded-xl p-4 text-xs text-slate-500 space-y-1">
+        <p><strong class="text-slate-700">Per-vehicle overrides</strong> — open any vehicle, go to "Edit / Pricing" tab.</p>
+        <p><strong class="text-slate-700">Market Value (% to Market)</strong> — enter a KBB or reference price per vehicle on the Edit tab. The % badge will appear automatically.</p>
+        <p><strong class="text-slate-700">Comparables</strong> — same make &amp; model within ±4 years, from your active catalog.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- ALPINE COMPONENT                                                        -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<script>
+function dashboard() {
+  return {
+    tab: 'inventory',
+    loading: true,
+    vehicles: [],
+    summary: {},
+    syncRuns: [],
+    makes: [],
+    years: [],
+    modal: null,
+    modalTab: 'details',
+    syncRunning: false,
+    statsRunning: false,
+    statusMsg: '',
+    lastRefreshed: '—',
+    filters: { search: '', make: '', year: '', condition: '', body_style: '' },
+    // settings modal
+    settingsOpen: false,
+    settings: { addendum_amount: 0 },
+    savingSettings: false,
+    settingsSaveMsg: '',
+    // vehicle edit
+    editForm: { price_override: '', addendum_override: '', market_value: '', notes: '' },
+    savingVehicle: false,
+    saveMsg: '',
+    // comparables
+    comparables: [],
+    loadingComps: false,
+
+    get bodyStyles() {
+      const set = new Set(this.vehicles.map(v => v.body_style).filter(Boolean))
+      return [...set].sort()
+    },
+    get topClicked() {
+      return [...this.vehicles].sort((a,b) => b.fb_clicks - a.fb_clicks).slice(0, 8)
+    },
+
+    async init() {
+      await Promise.all([this.loadSummary(), this.loadVehicles(), this.loadMeta(), this.loadRuns(), this.loadSettings()])
+      this.lastRefreshed = new Date().toLocaleTimeString()
+      this.$nextTick(() => this.drawCharts())
+    },
+
+    async reload() {
+      this.loading = true
+      await this.init()
+    },
+
+    async loadSummary() {
+      const r = await fetch('/api/summary')
+      this.summary = await r.json()
+    },
+
+    async loadSettings() {
+      const r = await fetch('/api/settings')
+      this.settings = await r.json()
+    },
+
+    async saveSettings() {
+      this.savingSettings = true
+      this.settingsSaveMsg = ''
+      const r = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ addendum_amount: parseInt(this.settings.addendum_amount) || 0 })
+      })
+      const d = await r.json()
+      this.settings = d
+      this.summary.addendum_amount = d.addendum_amount
+      this.savingSettings = false
+      this.settingsSaveMsg = 'Saved!'
+      setTimeout(() => this.settingsSaveMsg = '', 3000)
+      // reload vehicles to recompute prices
+      this.loadVehicles()
+    },
+
+    async loadVehicles() {
+      this.loading = true
+      const p = new URLSearchParams(Object.fromEntries(Object.entries(this.filters).filter(([,v])=>v)))
+      const r = await fetch('/api/vehicles?' + p)
+      const d = await r.json()
+      this.vehicles = d.vehicles
+      this.loading = false
+    },
+
+    async loadMeta() {
+      const [mr, yr] = await Promise.all([fetch('/api/makes'), fetch('/api/years')])
+      const md = await mr.json(); const yd = await yr.json()
+      this.makes = md.makes; this.years = yd.years
+    },
+
+    async loadRuns() {
+      const r = await fetch('/api/sync-runs?limit=30')
+      const d = await r.json()
+      this.syncRuns = d.runs
+    },
+
+    clearFilters() {
+      this.filters = { search:'', make:'', year:'', condition:'', body_style:'' }
+      this.loadVehicles()
+    },
+
+    openModal(v, tab='details') {
+      this.modal = v
+      this.modalTab = tab
+      this.comparables = []
+      this.saveMsg = ''
+      this.editForm = {
+        price_override:    v.price_override   != null ? String(v.price_override)   : '',
+        addendum_override: v.addendum_override != null ? String(v.addendum_override): '',
+        market_value:      v.market_value      != null ? String(v.market_value)     : '',
+        notes:             v.notes || '',
+      }
+      if (tab === 'comps') this.loadComparables()
+    },
+
+    async loadComparables() {
+      if (!this.modal) return
+      this.loadingComps = true
+      const r = await fetch('/api/comparable/' + this.modal.vin)
+      const d = await r.json()
+      this.comparables = d.comparables || []
+      this.loadingComps = false
+    },
+
+    async saveVehicle(extra = {}) {
+      if (!this.modal) return
+      this.savingVehicle = true
+      this.saveMsg = ''
+      const payload = {
+        ...extra,
+        notes: this.editForm.notes,
+      }
+      if (!extra.clear_price && this.editForm.price_override !== '')
+        payload.price_override = parseInt(this.editForm.price_override) || null
+      if (!extra.clear_addendum && this.editForm.addendum_override !== '')
+        payload.addendum_override = parseInt(this.editForm.addendum_override) || null
+      if (!extra.clear_market_value && this.editForm.market_value !== '')
+        payload.market_value = parseInt(this.editForm.market_value) || null
+
+      const r = await fetch('/api/vehicle/' + this.modal.vin + '/update', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      })
+      if (r.ok) {
+        const updated = await r.json()
+        this.modal = updated
+        // update in vehicle list too
+        const idx = this.vehicles.findIndex(v => v.vin === updated.vin)
+        if (idx >= 0) this.vehicles[idx] = updated
+        this.editForm = {
+          price_override:    updated.price_override    != null ? String(updated.price_override)    : '',
+          addendum_override: updated.addendum_override != null ? String(updated.addendum_override) : '',
+          market_value:      updated.market_value      != null ? String(updated.market_value)      : '',
+          notes:             updated.notes || '',
+        }
+        this.saveMsg = 'Saved!'
+        setTimeout(() => this.saveMsg = '', 3000)
+      } else {
+        this.saveMsg = 'Error saving — try again'
+      }
+      this.savingVehicle = false
+    },
+
+    async triggerSync() {
+      if (this.syncRunning) return
+      this.syncRunning = true
+      this.statusMsg = 'Sync started…'
+      await fetch('/api/trigger-sync', { method: 'POST' })
+      // Poll status every 3s
+      const poll = setInterval(async () => {
+        const r = await fetch('/api/sync-status')
+        const d = await r.json()
+        this.statusMsg = d.last_message
+        if (!d.running) {
+          clearInterval(poll)
+          this.syncRunning = false
+          await this.init()
+          setTimeout(() => this.statusMsg = '', 5000)
+        }
+      }, 3000)
+    },
+
+    async refreshStats() {
+      if (this.statsRunning) return
+      this.statsRunning = true
+      this.statusMsg = 'Fetching FB stats…'
+      await fetch('/api/refresh-fb-stats', { method: 'POST' })
+      const poll = setInterval(async () => {
+        const r = await fetch('/api/fb-stats-status')
+        const d = await r.json()
+        this.statusMsg = d.last_message
+        if (!d.running) {
+          clearInterval(poll)
+          this.statsRunning = false
+          await this.init()
+          setTimeout(() => this.statusMsg = '', 8000)
+        }
+      }, 2000)
+    },
+
+    tabLabel() {
+      return { inventory:'Inventory', analytics:'Analytics', history:'Sync History' }[this.tab] || ''
+    },
+
+    ctr() {
+      const i = this.summary.total_impressions
+      const c = this.summary.total_clicks
+      if (!i || !c) return '—'
+      return (c/i*100).toFixed(2) + '%'
+    },
+
+    fmt(n) {
+      if (n == null || n === '') return '—'
+      return Number(n).toLocaleString('en-US')
+    },
+
+    fmtBig(n) {
+      if (!n) return '0'
+      if (n >= 1000000) return (n/1000000).toFixed(1) + 'M'
+      if (n >= 1000) return (n/1000).toFixed(1) + 'K'
+      return String(n)
+    },
+
+    fmtDate(iso) {
+      if (!iso) return '—'
+      try {
+        return new Date(iso.endsWith('Z') ? iso : iso + 'Z')
+          .toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' })
+      } catch { return iso }
+    },
+
+    bodyBadge(bs) {
+      const map = {
+        SUV: 'bg-blue-100 text-blue-700', TRUCK: 'bg-orange-100 text-orange-700',
+        SEDAN: 'bg-slate-100 text-slate-700', COUPE: 'bg-purple-100 text-purple-700',
+        CONVERTIBLE: 'bg-pink-100 text-pink-700', HATCHBACK: 'bg-teal-100 text-teal-700',
+        MINIVAN: 'bg-yellow-100 text-yellow-700', WAGON: 'bg-green-100 text-green-700',
+        CROSSOVER: 'bg-cyan-100 text-cyan-700',
+      }
+      return map[bs] || 'bg-slate-100 text-slate-500'
+    },
+
+    drawCharts() {
+      const COLORS = ['#1877F2','#8B5CF6','#10B981','#F59E0B','#EF4444','#06B6D4','#EC4899','#6366F1','#14B8A6']
+
+      // Make chart
+      const makes  = Object.entries(this.summary.makes_breakdown || {})
+      const mc = document.getElementById('makeChart')
+      if (mc) {
+        if (mc._chart) mc._chart.destroy()
+        mc._chart = new Chart(mc, {
+          type: 'doughnut',
+          data: { labels: makes.map(x=>x[0]), datasets:[{ data: makes.map(x=>x[1]), backgroundColor: COLORS, borderWidth:2, borderColor:'#fff' }] },
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+        })
+      }
+
+      // Body style chart
+      const bodies = Object.entries(this.summary.body_breakdown || {})
+      const bc = document.getElementById('bodyChart')
+      if (bc) {
+        if (bc._chart) bc._chart.destroy()
+        bc._chart = new Chart(bc, {
+          type: 'doughnut',
+          data: { labels: bodies.map(x=>x[0]), datasets:[{ data: bodies.map(x=>x[1]), backgroundColor: COLORS, borderWidth:2, borderColor:'#fff' }] },
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+        })
+      }
+
+      // Year bar chart
+      const years = Object.entries(this.summary.years_breakdown || {}).reverse()
+      const yc = document.getElementById('yearChart')
+      if (yc) {
+        if (yc._chart) yc._chart.destroy()
+        yc._chart = new Chart(yc, {
+          type: 'bar',
+          data: { labels: years.map(x=>x[0]), datasets:[{ label:'Vehicles', data: years.map(x=>x[1]), backgroundColor:'#1877F2', borderRadius:4 }] },
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0, font:{ size:10 } } }, x:{ ticks:{ font:{ size:10 } } } } }
+        })
+      }
+
+      // Price histogram
+      const prices = this.vehicles.map(v=>v.price_dollars).filter(Boolean)
+      const pc = document.getElementById('priceChart')
+      if (pc && prices.length) {
+        const min = Math.floor(Math.min(...prices)/5000)*5000
+        const max = Math.ceil(Math.max(...prices)/5000)*5000
+        const buckets = {}
+        for (let b = min; b <= max; b += 5000) buckets[b] = 0
+        prices.forEach(p => { const b = Math.floor(p/5000)*5000; if (b in buckets) buckets[b]++ })
+        const labels = Object.keys(buckets).map(k=>'$'+Number(k).toLocaleString())
+        const data   = Object.values(buckets)
+        if (pc._chart) pc._chart.destroy()
+        pc._chart = new Chart(pc, {
+          type: 'bar',
+          data: { labels, datasets:[{ label:'Vehicles', data, backgroundColor:'#10B981', borderRadius:4 }] },
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0, font:{ size:9 } } }, x:{ ticks:{ font:{ size:9 }, maxRotation:45 } } } }
+        })
+      }
+    },
+
+    // Re-draw when switching to analytics
+    $watch_tab(val) {
+      if (val === 'analytics') this.$nextTick(() => this.drawCharts())
+    },
+  }
+}
+</script>
+
+</body>
+</html>

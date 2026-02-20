@@ -1,0 +1,9 @@
+.env
+*.csv
+__pycache__/
+*.pyc
+.playwright/
+*.db
+*.db-shm
+*.db-wal
+*.log
