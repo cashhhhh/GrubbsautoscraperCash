@@ -14,6 +14,10 @@ import re
 import sqlite3
 from datetime import datetime
 
+from passlib.context import CryptContext
+
+_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 DB_PATH = os.getenv("DB_PATH", "inventory.db")
 
 
@@ -82,6 +86,14 @@ def init_db() -> None:
             value TEXT NOT NULL DEFAULT ''
         );
 
+        CREATE TABLE IF NOT EXISTS users (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            password_hash TEXT NOT NULL,
+            is_admin      INTEGER DEFAULT 0,
+            created_at    TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_vs_vin   ON vehicle_stats(vin);
         CREATE INDEX IF NOT EXISTS idx_vs_date  ON vehicle_stats(stat_date);
         CREATE INDEX IF NOT EXISTS idx_v_make   ON vehicles(make);
@@ -90,6 +102,7 @@ def init_db() -> None:
 
     # Migrate existing DBs that are missing the new columns
     _migrate()
+    _seed_admin()
 
 
 def _migrate() -> None:
@@ -107,6 +120,71 @@ def _migrate() -> None:
                 c.execute(sql)
             except sqlite3.OperationalError:
                 pass  # column already exists — that's fine
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Users
+# ─────────────────────────────────────────────────────────────────────────────
+def _seed_admin() -> None:
+    """Create the default admin account if it doesn't exist yet."""
+    if not get_user("Cash"):
+        create_user("Cash", "Cash1345", is_admin=True)
+
+
+def get_user(username: str) -> dict | None:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT id, username, password_hash, is_admin, created_at FROM users WHERE username=? COLLATE NOCASE",
+            (username,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def verify_password(username: str, password: str) -> dict | None:
+    """Return the user dict if credentials are valid, else None."""
+    user = get_user(username)
+    if user and _pwd_ctx.verify(password, user["password_hash"]):
+        return user
+    return None
+
+
+def create_user(username: str, password: str, is_admin: bool = False) -> bool:
+    """Hash *password* and insert a new user. Returns False if username taken."""
+    hashed = _pwd_ctx.hash(password)
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    try:
+        with _conn() as c:
+            c.execute(
+                "INSERT INTO users (username, password_hash, is_admin, created_at) VALUES (?,?,?,?)",
+                (username, hashed, 1 if is_admin else 0, now),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False  # username already exists
+
+
+def delete_user(username: str) -> bool:
+    with _conn() as c:
+        cur = c.execute("DELETE FROM users WHERE username=? COLLATE NOCASE", (username,))
+    return cur.rowcount > 0
+
+
+def list_users() -> list[dict]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT id, username, is_admin, created_at FROM users ORDER BY id"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def change_password(username: str, new_password: str) -> bool:
+    hashed = _pwd_ctx.hash(new_password)
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE users SET password_hash=? WHERE username=? COLLATE NOCASE",
+            (hashed, username),
+        )
+    return cur.rowcount > 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────

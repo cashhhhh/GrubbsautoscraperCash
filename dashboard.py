@@ -14,12 +14,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import secrets
+
 import requests
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Path as FPath, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Path as FPath, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
 import db
 
@@ -35,7 +38,34 @@ _TEMPLATE = Path(__file__).parent / "templates" / "dashboard.html"
 
 db.init_db()
 
+_SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
+
 app = FastAPI(title="Grubbs INFINITI — Marketplace Dashboard", docs_url=None, redoc_url=None)
+app.add_middleware(SessionMiddleware, secret_key=_SECRET_KEY, session_cookie="grubbs_session", max_age=86400 * 7)
+
+_LOGIN_TEMPLATE = Path(__file__).parent / "templates" / "login.html"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Auth helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def _current_user(request: Request) -> dict:
+    """FastAPI dependency — returns session user or raises 401."""
+    username = request.session.get("username")
+    if not username:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = db.get_user(username)
+    if not user:
+        request.session.clear()
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+
+def _admin_user(user: dict = Depends(_current_user)) -> dict:
+    """FastAPI dependency — requires admin flag."""
+    if not user["is_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -71,16 +101,101 @@ def _enrich_vehicle(v: dict, addendum: int) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # HTML shell
 # ─────────────────────────────────────────────────────────────────────────────
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    if request.session.get("username"):
+        return RedirectResponse("/", status_code=302)
+    return _LOGIN_TEMPLATE.read_text(encoding="utf-8")
+
+
+class LoginPayload(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/login")
+def api_login(payload: LoginPayload, request: Request):
+    user = db.verify_password(payload.username, payload.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    request.session["username"] = user["username"]
+    request.session["is_admin"] = bool(user["is_admin"])
+    return {"username": user["username"], "is_admin": bool(user["is_admin"])}
+
+
+@app.post("/api/logout")
+def api_logout(request: Request):
+    request.session.clear()
+    return {"ok": True}
+
+
+@app.get("/api/me")
+def api_me(user: dict = Depends(_current_user)):
+    return {"username": user["username"], "is_admin": bool(user["is_admin"])}
+
+
 @app.get("/", response_class=HTMLResponse)
-def index():
+def index(request: Request):
+    if not request.session.get("username"):
+        return RedirectResponse("/login", status_code=302)
     return _TEMPLATE.read_text(encoding="utf-8")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# User management (admin only)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/api/users")
+def api_list_users(_admin: dict = Depends(_admin_user)):
+    return {"users": db.list_users()}
+
+
+class CreateUserPayload(BaseModel):
+    username: str
+    password: str
+    is_admin: bool = False
+
+
+@app.post("/api/users")
+def api_create_user(payload: CreateUserPayload, _admin: dict = Depends(_admin_user)):
+    if not payload.username.strip():
+        raise HTTPException(400, "Username cannot be blank")
+    if len(payload.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    ok = db.create_user(payload.username.strip(), payload.password, payload.is_admin)
+    if not ok:
+        raise HTTPException(409, f"Username '{payload.username}' already exists")
+    return {"ok": True, "users": db.list_users()}
+
+
+@app.delete("/api/users/{username}")
+def api_delete_user(username: str, request: Request, admin: dict = Depends(_admin_user)):
+    if username.lower() == admin["username"].lower():
+        raise HTTPException(400, "Cannot delete your own account")
+    ok = db.delete_user(username)
+    if not ok:
+        raise HTTPException(404, f"User '{username}' not found")
+    return {"ok": True, "users": db.list_users()}
+
+
+class ChangePasswordPayload(BaseModel):
+    new_password: str
+
+
+@app.post("/api/users/{username}/password")
+def api_change_password(username: str, payload: ChangePasswordPayload, admin: dict = Depends(_admin_user)):
+    if len(payload.new_password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    ok = db.change_password(username, payload.new_password)
+    if not ok:
+        raise HTTPException(404, f"User '{username}' not found")
+    return {"ok": True}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Settings
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/api/settings")
-def api_get_settings():
+def api_get_settings(_: dict = Depends(_current_user)):
     return db.get_all_settings(_ENV_ADDENDUM)
 
 
@@ -89,7 +204,7 @@ class SettingsPayload(BaseModel):
 
 
 @app.post("/api/settings")
-def api_save_settings(payload: SettingsPayload):
+def api_save_settings(payload: SettingsPayload, _: dict = Depends(_current_user)):
     if payload.addendum_amount is not None:
         if payload.addendum_amount < 0:
             raise HTTPException(400, "addendum_amount must be >= 0")
@@ -108,6 +223,7 @@ def api_vehicles(
     year:        str  = Query(default=""),
     search:      str  = Query(default=""),
     active_only: bool = Query(default=True),
+    _: dict = Depends(_current_user),
 ):
     addendum = _effective_addendum()
     vehicles = db.get_vehicles(
@@ -120,7 +236,7 @@ def api_vehicles(
 
 
 @app.get("/api/summary")
-def api_summary():
+def api_summary(_: dict = Depends(_current_user)):
     return db.get_summary(_effective_addendum())
 
 
@@ -135,7 +251,7 @@ class VehicleUpdatePayload(BaseModel):
 
 
 @app.post("/api/vehicle/{vin}/update")
-def api_update_vehicle(vin: str, payload: VehicleUpdatePayload):
+def api_update_vehicle(vin: str, payload: VehicleUpdatePayload, _: dict = Depends(_current_user)):
     fields: dict = {}
     if payload.clear_price:
         fields["price_override"] = None
@@ -166,7 +282,7 @@ def api_update_vehicle(vin: str, payload: VehicleUpdatePayload):
 
 
 @app.get("/api/comparable/{vin}")
-def api_comparable(vin: str):
+def api_comparable(vin: str, _: dict = Depends(_current_user)):
     comps = db.get_comparable_vehicles(vin)
     addendum = _effective_addendum()
     enriched = []
@@ -181,17 +297,17 @@ def api_comparable(vin: str):
 # Sync history
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/api/sync-runs")
-def api_sync_runs(limit: int = Query(default=25)):
+def api_sync_runs(limit: int = Query(default=25), _: dict = Depends(_current_user)):
     return {"runs": db.get_sync_runs(limit)}
 
 
 @app.get("/api/makes")
-def api_makes():
+def api_makes(_: dict = Depends(_current_user)):
     return {"makes": db.get_makes()}
 
 
 @app.get("/api/years")
-def api_years():
+def api_years(_: dict = Depends(_current_user)):
     return {"years": db.get_years()}
 
 
@@ -202,12 +318,12 @@ _sync: dict = {"running": False, "last_message": "Never run from dashboard", "st
 
 
 @app.get("/api/sync-status")
-def api_sync_status():
+def api_sync_status(_: dict = Depends(_current_user)):
     return _sync
 
 
 @app.post("/api/trigger-sync")
-def api_trigger_sync(background_tasks: BackgroundTasks):
+def api_trigger_sync(background_tasks: BackgroundTasks, _: dict = Depends(_current_user)):
     if _sync["running"]:
         return JSONResponse({"error": "Sync already in progress"}, status_code=409)
     background_tasks.add_task(_run_sync)
@@ -244,12 +360,12 @@ _fb_stats: dict = {"running": False, "last_message": "Never fetched", "fetched_a
 
 
 @app.get("/api/fb-stats-status")
-def api_fb_stats_status():
+def api_fb_stats_status(_: dict = Depends(_current_user)):
     return _fb_stats
 
 
 @app.post("/api/refresh-fb-stats")
-def api_refresh_fb_stats(background_tasks: BackgroundTasks):
+def api_refresh_fb_stats(background_tasks: BackgroundTasks, _: dict = Depends(_current_user)):
     if not FB_ACCESS_TOKEN:
         raise HTTPException(400, "FB_ACCESS_TOKEN not configured in .env")
     if not FB_CATALOG_ID:

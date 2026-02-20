@@ -87,6 +87,12 @@
         Sync History
       </div>
 
+      <!-- Admin: Users -->
+      <div x-show="isAdmin" class="nav-item" :class="tab==='users'&&'active'" @click="tab='users';loadUsers()">
+        <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>
+        Users
+      </div>
+
       <div class="my-3 border-t border-white/10"></div>
       <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider px-4 mb-2">Actions</p>
 
@@ -128,6 +134,21 @@
         <svg class="w-4 h-4 fill-current shrink-0" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
         Settings
       </button>
+
+      <!-- Signed-in user + Logout -->
+      <div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-6 h-6 rounded-full bg-fb/20 flex items-center justify-center shrink-0">
+            <span class="text-fb text-xs font-bold" x-text="currentUser.slice(0,1).toUpperCase()"></span>
+          </div>
+          <span class="text-slate-300 text-xs font-medium truncate" x-text="currentUser"></span>
+          <span x-show="isAdmin" class="text-xs px-1.5 py-0.5 rounded bg-fb/20 text-fb font-semibold leading-none">Admin</span>
+        </div>
+        <button @click="logout()" title="Sign out"
+          class="text-slate-500 hover:text-red-400 transition-colors ml-1 shrink-0">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h7a1 1 0 100-2H4V5h6a1 1 0 100-2H3zm11.293 4.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L15.586 12H9a1 1 0 110-2h6.586l-1.293-1.293a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        </button>
+      </div>
     </div>
   </aside>
 
@@ -545,6 +566,86 @@
         </div>
       </div>
 
+      <!-- ══ USERS TAB (admin only) ════════════════════════════════════════ -->
+      <div x-show="tab==='users' && isAdmin" x-cloak class="space-y-6">
+
+        <!-- Create user form -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <h3 class="text-sm font-bold text-slate-800 mb-4">Create New User</h3>
+          <div class="flex flex-wrap gap-3 items-end">
+            <div>
+              <label class="block text-xs text-slate-500 mb-1">Username</label>
+              <input type="text" x-model="newUser.username" placeholder="e.g. John"
+                class="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb w-44"/>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500 mb-1">Password</label>
+              <input type="text" x-model="newUser.password" placeholder="min 6 chars"
+                class="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb w-44"/>
+            </div>
+            <div class="flex items-center gap-2 pb-0.5">
+              <input type="checkbox" id="newUserAdmin" x-model="newUser.is_admin" class="w-4 h-4 accent-fb"/>
+              <label for="newUserAdmin" class="text-xs text-slate-600 font-medium">Admin</label>
+            </div>
+            <button class="btn-primary text-sm" @click="createUser()" :disabled="userSaving">
+              <span x-show="!userSaving">Add User</span>
+              <span x-show="userSaving">Adding…</span>
+            </button>
+            <p x-show="userMsg" class="text-xs font-semibold" :class="userMsgOk ? 'text-emerald-600' : 'text-red-500'" x-text="userMsg"></p>
+          </div>
+        </div>
+
+        <!-- Users table -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-100">
+                <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Username</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Role</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Created</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">New Password</th>
+                <th class="px-5 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <template x-if="users.length === 0">
+                <tr><td colspan="5" class="py-10 text-center text-slate-400 text-sm">No users yet.</td></tr>
+              </template>
+              <template x-for="u in users" :key="u.id">
+                <tr class="hover:bg-slate-50 transition-colors">
+                  <td class="px-5 py-3 font-semibold text-slate-800 text-sm flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-fb/10 flex items-center justify-center shrink-0">
+                      <span class="text-fb text-xs font-bold" x-text="u.username.slice(0,1).toUpperCase()"></span>
+                    </div>
+                    <span x-text="u.username"></span>
+                  </td>
+                  <td class="px-5 py-3">
+                    <span class="badge" :class="u.is_admin ? 'bg-fb/10 text-fb' : 'bg-slate-100 text-slate-500'"
+                      x-text="u.is_admin ? 'Admin' : 'User'"></span>
+                  </td>
+                  <td class="px-5 py-3 text-xs text-slate-400" x-text="u.created_at ? u.created_at.replace('T',' ') : '—'"></td>
+                  <td class="px-5 py-3">
+                    <div class="flex gap-2 items-center">
+                      <input type="text" :placeholder="'New password for ' + u.username"
+                        x-model="pwdInputs[u.username]"
+                        class="px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-fb/30 focus:border-fb w-40"/>
+                      <button class="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium transition-colors"
+                        @click="changePassword(u.username)">Set</button>
+                    </div>
+                  </td>
+                  <td class="px-5 py-3 text-center">
+                    <button x-show="u.username.toLowerCase() !== currentUser.toLowerCase()"
+                      class="text-xs px-3 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-semibold transition-colors"
+                      @click="deleteUser(u.username)">Delete</button>
+                    <span x-show="u.username.toLowerCase() === currentUser.toLowerCase()" class="text-xs text-slate-300">You</span>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div><!-- /main content -->
   </main>
 </div>
@@ -870,6 +971,9 @@ function dashboard() {
     statusMsg: '',
     lastRefreshed: '—',
     filters: { search: '', make: '', year: '', condition: '', body_style: '' },
+    // auth
+    currentUser: '',
+    isAdmin: false,
     // settings modal
     settingsOpen: false,
     settings: { addendum_amount: 0 },
@@ -882,6 +986,13 @@ function dashboard() {
     // comparables
     comparables: [],
     loadingComps: false,
+    // user management
+    users: [],
+    newUser: { username: '', password: '', is_admin: false },
+    userSaving: false,
+    userMsg: '',
+    userMsgOk: true,
+    pwdInputs: {},
 
     get bodyStyles() {
       const set = new Set(this.vehicles.map(v => v.body_style).filter(Boolean))
@@ -892,6 +1003,7 @@ function dashboard() {
     },
 
     async init() {
+      await this.loadMe()
       await Promise.all([this.loadSummary(), this.loadVehicles(), this.loadMeta(), this.loadRuns(), this.loadSettings()])
       this.lastRefreshed = new Date().toLocaleTimeString()
       this.$nextTick(() => this.drawCharts())
@@ -902,8 +1014,76 @@ function dashboard() {
       await this.init()
     },
 
+    async loadMe() {
+      const r = await fetch('/api/me')
+      if (r.status === 401) { window.location.href = '/login'; return }
+      const d = await r.json()
+      this.currentUser = d.username
+      this.isAdmin = d.is_admin
+    },
+
+    async logout() {
+      await fetch('/api/logout', { method: 'POST' })
+      window.location.href = '/login'
+    },
+
+    async loadUsers() {
+      if (!this.isAdmin) return
+      const r = await fetch('/api/users')
+      if (r.ok) { const d = await r.json(); this.users = d.users }
+    },
+
+    async createUser() {
+      this.userMsg = ''
+      if (!this.newUser.username.trim() || !this.newUser.password.trim()) {
+        this.userMsg = 'Username and password are required'; this.userMsgOk = false; return
+      }
+      this.userSaving = true
+      const r = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.newUser),
+      })
+      const d = await r.json()
+      this.userSaving = false
+      if (r.ok) {
+        this.users = d.users
+        this.newUser = { username: '', password: '', is_admin: false }
+        this.userMsg = 'User created'; this.userMsgOk = true
+      } else {
+        this.userMsg = d.detail || 'Error'; this.userMsgOk = false
+      }
+      setTimeout(() => this.userMsg = '', 4000)
+    },
+
+    async deleteUser(username) {
+      if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return
+      const r = await fetch(`/api/users/${encodeURIComponent(username)}`, { method: 'DELETE' })
+      const d = await r.json()
+      if (r.ok) { this.users = d.users }
+      else { alert(d.detail || 'Error deleting user') }
+    },
+
+    async changePassword(username) {
+      const pw = this.pwdInputs[username]
+      if (!pw || pw.length < 6) { alert('Password must be at least 6 characters'); return }
+      const r = await fetch(`/api/users/${encodeURIComponent(username)}/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: pw }),
+      })
+      if (r.ok) {
+        this.pwdInputs[username] = ''
+        alert(`Password updated for ${username}`)
+      } else {
+        const d = await r.json()
+        alert(d.detail || 'Error updating password')
+      }
+    },
+
     async loadSummary() {
       const r = await fetch('/api/summary')
+      if (r.status === 401) { window.location.href = '/login'; return }
       this.summary = await r.json()
     },
 
@@ -1057,7 +1237,7 @@ function dashboard() {
     },
 
     tabLabel() {
-      return { inventory:'Inventory', analytics:'Analytics', history:'Sync History' }[this.tab] || ''
+      return { inventory:'Inventory', analytics:'Analytics', history:'Sync History', users:'User Management' }[this.tab] || ''
     },
 
     ctr() {
