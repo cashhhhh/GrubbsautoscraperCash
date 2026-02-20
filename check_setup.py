@@ -22,7 +22,7 @@ FB_CATALOG_ID   = os.getenv("FB_CATALOG_ID",   "")
 FB_APP_ID       = os.getenv("FB_APP_ID",        "")
 FB_APP_SECRET   = os.getenv("FB_APP_SECRET",    "")
 FB_API_VERSION  = os.getenv("FB_API_VERSION",   "v21.0")
-RSS_URL         = os.getenv("RSS_URL", "https://www.infinitiofsanantonio.com/rss-usedinventory.aspx")
+RSS_URL         = os.getenv("RSS_URL", ""https://www.infinitiofsanantonio.com/searchused.aspx?Dealership=Grubbs%20INFINITI%20of%20San%20Antonio")
 
 BASE = f"https://graph.facebook.com/{FB_API_VERSION}"
 
