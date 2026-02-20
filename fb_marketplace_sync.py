@@ -395,7 +395,12 @@ async def scrape_prices(vehicles: list[Vehicle], debug: bool = False) -> list[Ve
 # ──────────────────────────────────────────────────────────────────────────────
 def _fb_item(v: Vehicle) -> dict:
     """Return the data dict for one vehicle in the FB catalog format."""
-    price_str = v.price if v.price else "0 USD"
+    # Vehicles catalog requires price as an integer in cents (e.g. $24,995 → 2499500)
+    price_cents = 0
+    if v.price:
+        m = re.match(r"(\d+)", v.price)
+        if m:
+            price_cents = int(m.group(1)) * 100
 
     item = {
         "id":             v.vin,
@@ -403,7 +408,7 @@ def _fb_item(v: Vehicle) -> dict:
         "description":    v.description,
         "availability":   "in stock",
         "condition":      v.condition,
-        "price":          price_str,
+        "price":          price_cents,
         "link":           v.link,
         "image_link":     v.image_url,
         "brand":          v.make,
