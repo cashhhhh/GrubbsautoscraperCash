@@ -1380,6 +1380,14 @@ function dashboard() {
         return
       }
       this.pencilVehicle = v
+
+      const vehicleAddendum = v.effective_addendum
+      const globalAddendum = this.settings?.addendum_amount
+      const fallbackAddendum = this.mockPencil.addendumAmount
+      this.mockPencil.addendumAmount = Number(
+        vehicleAddendum ?? globalAddendum ?? fallbackAddendum ?? 4400
+      )
+
       this.pencilDeskOpen = true
     },
 
