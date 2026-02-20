@@ -23,6 +23,7 @@ import re
 import sys
 import time
 import xml.etree.ElementTree as ET
+from urllib.parse import urljoin
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -36,7 +37,7 @@ load_dotenv()
 # ──────────────────────────────────────────────────────────────────────────────
 # Config  (override any of these in .env)
 # ──────────────────────────────────────────────────────────────────────────────
-RSS_URL                  = os.getenv("RSS_URL",         "https://www.infinitiofsanantonio.com/rss-usedinventory.aspx")
+RSS_URL                  = os.getenv("RSS_URL",         "https://www.infinitiofsanantonio.com/searchused.aspx?Dealership=Grubbs%20INFINITI%20of%20San%20Antonio")
 DEALER_BASE_URL          = os.getenv("DEALER_BASE_URL", "https://www.infinitiofsanantonio.com")
 FB_ACCESS_TOKEN          = os.getenv("FB_ACCESS_TOKEN", "")
 FB_CATALOG_ID            = os.getenv("FB_CATALOG_ID",   "")
@@ -85,20 +86,52 @@ class Vehicle:
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 1 — Parse RSS feed
 # ──────────────────────────────────────────────────────────────────────────────
-def fetch_rss() -> list[Vehicle]:
-    """Fetch and parse the DealerOn used-inventory RSS feed."""
+def _fetch_url_text(url: str) -> str:
     try:
-        resp = requests.get(RSS_URL, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+        resp = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
         resp.raise_for_status()
     except requests.RequestException as exc:
-        raise RuntimeError(f"Unable to fetch RSS feed at {RSS_URL}: {exc}") from exc
+        raise RuntimeError(f"Unable to fetch inventory source at {url}: {exc}") from exc
+    return resp.text.lstrip("\ufeff").strip()
 
-    # Strip any BOM / leading whitespace that would break ET
-    raw = resp.text.lstrip("\ufeff").strip()
+
+def _discover_rss_url(html: str) -> str | None:
+    """Discover DealerOn rss-usedinventory endpoint from HTML."""
+    for pattern in [
+        r'href=["\']([^"\']*rss-usedinventory\.aspx[^"\']*)["\']',
+        r'"(https?://[^"\']*rss-usedinventory\.aspx[^"\']*)"',
+        r'"(/rss-usedinventory\.aspx[^"\']*)"',
+    ]:
+        m = re.search(pattern, html, re.I)
+        if m:
+            return urljoin(DEALER_BASE_URL, m.group(1))
+    return None
+
+
+def _parse_rss_xml(raw: str, source_url: str) -> ET.Element:
     try:
-        root = ET.fromstring(raw)
+        return ET.fromstring(raw)
     except ET.ParseError as exc:
-        raise RuntimeError(f"RSS feed returned invalid XML from {RSS_URL}: {exc}") from exc
+        raise RuntimeError(f"Inventory feed at {source_url} did not return valid RSS/XML: {exc}") from exc
+
+
+def fetch_rss() -> list[Vehicle]:
+    """Fetch and parse used inventory RSS feed, with search-page fallback discovery."""
+    raw = _fetch_url_text(RSS_URL)
+    feed_url = RSS_URL
+
+    # If RSS_URL points to an HTML search page, discover rss-usedinventory endpoint.
+    if "<rss" not in raw.lower() and "<feed" not in raw.lower():
+        discovered_rss = _discover_rss_url(raw)
+        if not discovered_rss:
+            raise RuntimeError(
+                "Inventory source did not look like RSS/XML and no rss-usedinventory URL was found. "
+                f"Source: {RSS_URL}"
+            )
+        feed_url = discovered_rss
+        raw = _fetch_url_text(feed_url)
+
+    root = _parse_rss_xml(raw, feed_url)
 
     vehicles: list[Vehicle] = []
     for item in root.findall(".//item"):
