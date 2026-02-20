@@ -29,7 +29,7 @@ FB_ACCESS_TOKEN  = os.getenv("FB_ACCESS_TOKEN", "")
 FB_CATALOG_ID    = os.getenv("FB_CATALOG_ID", "")
 FB_API_VERSION   = os.getenv("FB_API_VERSION", "v21.0")
 _ENV_ADDENDUM    = int(os.getenv("ADDENDUM_AMOUNT", "0"))   # env fallback only
-DASHBOARD_PORT   = int(os.getenv("DASHBOARD_PORT", "8000"))
+DASHBOARD_PORT   = int(os.getenv("PORT", os.getenv("DASHBOARD_PORT", "8000")))
 
 _TEMPLATE = Path(__file__).parent / "templates" / "dashboard.html"
 

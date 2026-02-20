@@ -1,0 +1,38 @@
+services:
+  # ── Web dashboard ────────────────────────────────────────────────────────────
+  - type: web
+    name: grubbs-dashboard
+    runtime: python
+    plan: free                # upgrade to "starter" ($7/mo) if you need a disk
+    buildCommand: >-
+      pip install -r requirements.txt &&
+      python -m playwright install chromium --with-deps
+    startCommand: python dashboard.py
+
+    envVars:
+      # Render injects PORT automatically — dashboard.py already reads it.
+
+      # SQLite location — override to /data/inventory.db once you add a Disk.
+      # On the free plan leave this as-is (DB resets on redeploy; use the
+      # Starter plan + the Disk block below for persistence).
+      - key: DB_PATH
+        value: inventory.db
+
+      # Set these in the Render dashboard → Environment → Secret Files / Env Vars
+      - key: FB_ACCESS_TOKEN
+        sync: false
+      - key: FB_CATALOG_ID
+        sync: false
+      - key: FB_API_VERSION
+        value: v21.0
+
+      # Optional — keeps scraper limited to SA store URLs
+      - key: SA_DOMAIN_FILTER
+        value: infinitiofsanantonio.com
+
+    # ── Uncomment this block on Starter plan to keep inventory.db between deploys ──
+    # disk:
+    #   name: inventory-db
+    #   mountPath: /data
+    #   sizeGB: 1
+    # Then also change DB_PATH above to: /data/inventory.db
