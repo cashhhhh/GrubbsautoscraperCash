@@ -333,11 +333,12 @@
                   <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Saves</th>
                   <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                   <th class="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Links</th>
+                  <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Mock Pencil</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-50">
                 <template x-if="vehicles.length === 0">
-                  <tr><td colspan="13" class="py-12 text-center text-slate-400 text-sm">No vehicles match your filters.</td></tr>
+                  <tr><td colspan="14" class="py-12 text-center text-slate-400 text-sm">No vehicles match your filters.</td></tr>
                 </template>
                 <template x-for="v in vehicles" :key="v.vin">
                   <tr class="hover:bg-blue-50/40 transition-colors cursor-default group"
@@ -433,6 +434,23 @@
                       <div class="flex items-center gap-1.5">
                         <a x-show="v.link" :href="v.link" target="_blank" rel="noopener"
                           class="text-xs text-fb hover:underline font-medium">VDP ↗</a>
+                      </div>
+                    </td>
+                    <!-- Mock Pencil -->
+                    <td class="px-3 py-2.5 text-center" @click.stop>
+                      <div class="flex items-center justify-center gap-1.5">
+                        <button
+                          class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          :disabled="!v.price_ok"
+                          @click="openPencilDesk(v)">
+                          Desk
+                        </button>
+                        <button
+                          class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          :disabled="!v.price_ok"
+                          @click="downloadMockPencil(v)">
+                          Download
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -910,6 +928,93 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- PENCIL DESKING MODAL                                                    -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div x-show="pencilDeskOpen" x-cloak
+  class="fixed inset-0 z-50 flex items-center justify-center p-4"
+  @keydown.escape.window="pencilDeskOpen=false">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="pencilDeskOpen=false"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[92vh] flex flex-col" x-transition>
+    <div class="flex items-center justify-between p-6 border-b border-slate-100">
+      <div>
+        <h2 class="text-base font-bold text-slate-900">Pencil Desking Dashboard</h2>
+        <p class="text-xs text-slate-400" x-text="pencilVehicle ? (pencilVehicle.year + ' ' + pencilVehicle.make + ' ' + pencilVehicle.model + ' · ' + (pencilVehicle.stock_number || pencilVehicle.vin)) : ''"></p>
+      </div>
+      <button @click="pencilDeskOpen=false" class="text-slate-400 hover:text-slate-700">
+        <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+    <div class="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="space-y-4">
+        <div class="bg-slate-50 rounded-xl p-4 space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">Finance Inputs</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="text-xs font-semibold text-slate-600">APR %
+              <input type="number" step="0.1" min="0" x-model.number="mockPencil.apr" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="text-xs font-semibold text-slate-600">Term (months)
+              <input type="number" min="1" step="1" x-model.number="mockPencil.termMonths" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+          <label class="text-xs font-semibold text-slate-600">Down Payment
+            <input type="number" step="1" min="0" x-model.number="mockPencil.downPayment" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+          </label>
+        </div>
+
+        <div class="bg-slate-50 rounded-xl p-4 space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">Fee Setup (editable labels)</h3>
+          <div class="grid grid-cols-5 gap-2 items-end">
+            <label class="col-span-3 text-xs font-semibold text-slate-600">Addendum Label
+              <input type="text" x-model="mockPencil.addendumLabel" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="col-span-2 text-xs font-semibold text-slate-600">Amount
+              <input type="number" min="0" step="1" x-model.number="mockPencil.addendumAmount" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+          <div class="grid grid-cols-5 gap-2 items-end">
+            <label class="col-span-3 text-xs font-semibold text-slate-600">Tax Label
+              <input type="text" x-model="mockPencil.taxLabel" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="col-span-2 text-xs font-semibold text-slate-600">Tax Rate %
+              <input type="number" min="0" step="0.01" x-model.number="mockPencil.taxRate" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+          <div class="grid grid-cols-5 gap-2 items-end">
+            <label class="col-span-3 text-xs font-semibold text-slate-600">Doc Fee Label
+              <input type="text" x-model="mockPencil.docFeeLabel" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="col-span-2 text-xs font-semibold text-slate-600">Amount
+              <input type="number" min="0" step="1" x-model.number="mockPencil.docFeeAmount" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+        <h3 class="text-sm font-bold text-slate-800">Live Pencil Preview</h3>
+        <table class="w-full text-sm">
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Internet Price</td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().basePrice)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500" x-text="mockPencil.addendumLabel"></td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().addendumAmount)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500" x-text="mockPencil.taxLabel + ' (' + Number(mockPencil.taxRate || 0).toFixed(2) + '%)'"></td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().taxAmount)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500" x-text="mockPencil.docFeeLabel"></td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().docFeeAmount)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Out-the-Door</td><td class="py-2 text-right font-bold text-slate-900" x-text="fmtMoney(pencilTotals().outTheDoor)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Down Payment</td><td class="py-2 text-right font-semibold" x-text="fmtMoney(mockPencil.downPayment)"></td></tr>
+          <tr><td class="py-2 text-slate-500">Amount Financed</td><td class="py-2 text-right font-bold text-fb" x-text="fmtMoney(pencilTotals().amountFinanced)"></td></tr>
+        </table>
+
+        <div class="rounded-xl bg-fb/10 border border-fb/20 p-4">
+          <p class="text-xs text-slate-600">Estimated Monthly Payment</p>
+          <p class="text-3xl font-extrabold text-fb" x-text="fmtMoney(pencilTotals().monthlyPayment)"></p>
+          <p class="text-xs text-slate-500 mt-1" x-text="Number(mockPencil.apr || 0).toFixed(2) + '% APR · ' + (mockPencil.termMonths || 0) + ' months'"></p>
+        </div>
+
+        <button class="btn-primary w-full justify-center" @click="downloadMockPencil(pencilVehicle)" :disabled="!pencilVehicle">Download Pencil</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
 <!-- SETTINGS MODAL                                                          -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <div x-show="settingsOpen" x-cloak
@@ -993,6 +1098,19 @@ function dashboard() {
     userMsg: '',
     userMsgOk: true,
     pwdInputs: {},
+    pencilDeskOpen: false,
+    pencilVehicle: null,
+    mockPencil: {
+      addendumLabel: 'Addendum',
+      addendumAmount: 4400,
+      taxLabel: 'State Tax',
+      taxRate: 6.25,
+      docFeeLabel: 'Doc Fee',
+      docFeeAmount: 225,
+      apr: 8.99,
+      termMonths: 72,
+      downPayment: 0,
+    },
 
     get bodyStyles() {
       const set = new Set(this.vehicles.map(v => v.body_style).filter(Boolean))
@@ -1250,6 +1368,108 @@ function dashboard() {
     fmt(n) {
       if (n == null || n === '') return '—'
       return Number(n).toLocaleString('en-US')
+    },
+
+    fmtMoney(n) {
+      return Number(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+    },
+
+    openPencilDesk(v) {
+      if (!v?.price_ok || !v?.effective_price) {
+        alert('This unit needs an internet price before desking.')
+        return
+      }
+      this.pencilVehicle = v
+      this.pencilDeskOpen = true
+    },
+
+    pencilTotals(v = this.pencilVehicle) {
+      const basePrice = Number(v?.effective_price || 0)
+      const addendumAmount = Number(this.mockPencil.addendumAmount || 0)
+      const taxRate = Number(this.mockPencil.taxRate || 0) / 100
+      const taxAmount = Number(((basePrice + addendumAmount) * taxRate).toFixed(2))
+      const docFeeAmount = Number(this.mockPencil.docFeeAmount || 0)
+      const outTheDoor = Number((basePrice + addendumAmount + taxAmount + docFeeAmount).toFixed(2))
+      const downPayment = Number(this.mockPencil.downPayment || 0)
+      const amountFinanced = Math.max(0, Number((outTheDoor - downPayment).toFixed(2)))
+      const apr = Number(this.mockPencil.apr || 0)
+      const term = Math.max(1, parseInt(this.mockPencil.termMonths || 1, 10))
+      const monthlyRate = apr / 1200
+      const monthlyPayment = monthlyRate > 0
+        ? Number((amountFinanced * monthlyRate / (1 - Math.pow(1 + monthlyRate, -term))).toFixed(2))
+        : Number((amountFinanced / term).toFixed(2))
+
+      return { basePrice, addendumAmount, taxAmount, docFeeAmount, outTheDoor, amountFinanced, monthlyPayment }
+    },
+
+    downloadMockPencil(v) {
+      if (!v?.price_ok || !v?.effective_price) {
+        alert('This unit needs an internet price before generating a pencil.')
+        return
+      }
+
+      const totals = this.pencilTotals(v)
+      const vehicleLabel = `${v.year || ''} ${v.make || ''} ${v.model || ''}`.trim()
+      const trimLabel = v.trim ? ` ${v.trim}` : ''
+      const stock = v.stock_number || 'N/A'
+      const vin = v.vin || 'N/A'
+
+      const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Mock Pencil - ${vehicleLabel}</title>
+    <style>
+      body { font-family: Inter, Arial, sans-serif; margin: 28px; color: #0f172a; }
+      .card { max-width: 760px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+      .head { background: #0f172a; color: #fff; padding: 22px; }
+      .head h1 { margin: 0; font-size: 22px; }
+      .head p { margin: 6px 0 0; color: #cbd5e1; font-size: 13px; }
+      .meta { padding: 18px 22px 8px; font-size: 13px; color: #334155; }
+      table { width: calc(100% - 44px); margin: 10px 22px 20px; border-collapse: collapse; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+      th { text-align: left; color: #475569; font-weight: 600; }
+      td:last-child, th:last-child { text-align: right; }
+      .otd td { font-size: 18px; font-weight: 700; color: #0f172a; border-top: 2px solid #94a3b8; }
+      .payment td { font-size: 16px; font-weight: 700; color: #1d4ed8; }
+      .foot { padding: 0 22px 20px; font-size: 12px; color: #64748b; line-height: 1.45; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="head">
+        <h1>Grubbs INFINITI — Mock Pencil</h1>
+        <p>Prepared for customer review</p>
+      </div>
+      <div class="meta">
+        <div><strong>Vehicle:</strong> ${vehicleLabel}${trimLabel}</div>
+        <div><strong>Stock:</strong> ${stock} &nbsp;&nbsp; <strong>VIN:</strong> ${vin}</div>
+        <div><strong>Date:</strong> ${new Date().toLocaleString()}</div>
+      </div>
+      <table>
+        <tr><th>Internet Price</th><td>${this.fmtMoney(totals.basePrice)}</td></tr>
+        <tr><th>${this.mockPencil.addendumLabel}</th><td>${this.fmtMoney(totals.addendumAmount)}</td></tr>
+        <tr><th>${this.mockPencil.taxLabel} (${Number(this.mockPencil.taxRate || 0).toFixed(2)}%)</th><td>${this.fmtMoney(totals.taxAmount)}</td></tr>
+        <tr><th>${this.mockPencil.docFeeLabel}</th><td>${this.fmtMoney(totals.docFeeAmount)}</td></tr>
+        <tr class="otd"><td>Estimated Out-the-Door</td><td>${this.fmtMoney(totals.outTheDoor)}</td></tr>
+        <tr><th>Down Payment</th><td>${this.fmtMoney(this.mockPencil.downPayment)}</td></tr>
+        <tr class="payment"><td>Estimated Monthly Payment (${Number(this.mockPencil.apr || 0).toFixed(2)}% / ${this.mockPencil.termMonths} mo)</td><td>${this.fmtMoney(totals.monthlyPayment)}</td></tr>
+      </table>
+      <div class="foot">
+        This mock pencil is an estimate and is subject to lender approval, final tax/title calculations,
+        and availability at time of delivery.
+      </div>
+    </div>
+  </body>
+</html>`
+
+      const blob = new Blob([html], { type: 'text/html' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `mock-pencil-${(stock !== 'N/A' ? stock : vin).replace(/[^a-z0-9-]/gi, '_')}.html`
+      a.click()
+      URL.revokeObjectURL(url)
     },
 
     fmtBig(n) {
