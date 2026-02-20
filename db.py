@@ -119,6 +119,10 @@ def _migrate() -> None:
         "ALTER TABLE vehicles ADD COLUMN market_value         INTEGER",
         "ALTER TABLE vehicles ADD COLUMN notes                TEXT DEFAULT ''",
         "ALTER TABLE vehicles ADD COLUMN price_scrape_attempts INTEGER DEFAULT 0",
+        "ALTER TABLE vehicles ADD COLUMN cost                 INTEGER",
+        "ALTER TABLE vehicles ADD COLUMN pack                 INTEGER DEFAULT 0",
+        "ALTER TABLE vehicles ADD COLUMN cox_adj_cost_to_market REAL",
+        "ALTER TABLE vehicles ADD COLUMN cox_report_date      TEXT",
     ]
     with _conn() as c:
         for sql in migrations:
@@ -249,6 +253,77 @@ def update_scrape_attempts(updates: dict[str, int]) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Cox Auto report import
+# ─────────────────────────────────────────────────────────────────────────────
+def parse_cox_report(text: str) -> list[dict]:
+    """
+    Parse raw Cox Auto inventory report text.
+    Splits on 'VIN:' boundaries and extracts VIN, internet price,
+    Adj Cost To Market %, and report date per vehicle block.
+    """
+    records: list[dict] = []
+    blocks = re.split(r"VIN:", text)
+    for block in blocks[1:]:
+        lines = block.split("\n")
+        vin = lines[0].strip()
+        if not vin or len(vin) != 17:
+            continue
+
+        price_m = re.search(r"\$(\d{1,3}(?:,\d{3})+|\d{4,6})", block)
+        price   = int(price_m.group(1).replace(",", "")) if price_m else None
+
+        adj_m = re.search(r"Adj Cost To Market:(\d+)%", block)
+        adj   = int(adj_m.group(1)) if adj_m else None
+
+        date_m = re.search(r"(\d{2}/\d{2}/\d{4})", block)
+        date   = date_m.group(1) if date_m else None
+
+        records.append({"vin": vin, "internet_price": price,
+                         "adj_cost_to_market": adj, "report_date": date})
+    return records
+
+
+def cox_import(records: list[dict]) -> dict:
+    """
+    Update vehicles matched by VIN from a parsed Cox report.
+    Derives market_value = internet_price / (adj_cost_to_market / 100)
+    when both values are present.
+    Returns {"updated": N, "skipped": M}.
+    """
+    updated = 0
+    skipped = 0
+    with _conn() as c:
+        for r in records:
+            vin = r.get("vin", "")
+            if not vin or len(vin) != 17:
+                skipped += 1
+                continue
+            row = c.execute("SELECT vin FROM vehicles WHERE vin=?", (vin,)).fetchone()
+            if not row:
+                skipped += 1
+                continue
+
+            fields: dict = {}
+            adj   = r.get("adj_cost_to_market")
+            price = r.get("internet_price")
+            if adj is not None:
+                fields["cox_adj_cost_to_market"] = adj
+            if r.get("report_date"):
+                fields["cox_report_date"] = r["report_date"]
+            if price and adj and adj > 0:
+                fields["market_value"] = round(price / (adj / 100))
+
+            if fields:
+                set_clause = ", ".join(f"{k}=?" for k in fields)
+                c.execute(f"UPDATE vehicles SET {set_clause} WHERE vin=?",
+                          [*fields.values(), vin])
+                updated += 1
+            else:
+                skipped += 1
+    return {"updated": updated, "skipped": skipped}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Vehicles
 # ─────────────────────────────────────────────────────────────────────────────
 def upsert_vehicles(vehicle_rows: list[dict]) -> None:
@@ -322,7 +397,7 @@ def update_vehicle_fields(vin: str, fields: dict) -> bool:
     Pass None to clear a numeric override.
     Returns True if a row was updated.
     """
-    allowed = {"price_override", "addendum_override", "market_value", "notes"}
+    allowed = {"price_override", "addendum_override", "market_value", "notes", "cost", "pack"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False

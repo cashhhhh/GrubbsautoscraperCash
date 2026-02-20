@@ -294,6 +294,24 @@ def api_comparable(vin: str, _: dict = Depends(_current_user)):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Cox Auto report import
+# ─────────────────────────────────────────────────────────────────────────────
+class CoxImportPayload(BaseModel):
+    raw_text: str
+
+
+@app.post("/api/cox-import")
+def api_cox_import(payload: CoxImportPayload, _: dict = Depends(_current_user)):
+    if not payload.raw_text.strip():
+        raise HTTPException(400, "raw_text is empty")
+    records = db.parse_cox_report(payload.raw_text)
+    if not records:
+        raise HTTPException(400, "No VINs found in report text — make sure you pasted the full Cox report")
+    result = db.cox_import(records)
+    return {**result, "parsed": len(records)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Sync history
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/api/sync-runs")
