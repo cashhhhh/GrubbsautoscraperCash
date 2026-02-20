@@ -95,10 +95,11 @@ def init_db() -> None:
 def _migrate() -> None:
     """Add new columns to existing databases without breaking anything."""
     migrations = [
-        "ALTER TABLE vehicles ADD COLUMN price_override    INTEGER",
-        "ALTER TABLE vehicles ADD COLUMN addendum_override INTEGER",
-        "ALTER TABLE vehicles ADD COLUMN market_value      INTEGER",
-        "ALTER TABLE vehicles ADD COLUMN notes             TEXT DEFAULT ''",
+        "ALTER TABLE vehicles ADD COLUMN price_override       INTEGER",
+        "ALTER TABLE vehicles ADD COLUMN addendum_override    INTEGER",
+        "ALTER TABLE vehicles ADD COLUMN market_value         INTEGER",
+        "ALTER TABLE vehicles ADD COLUMN notes                TEXT DEFAULT ''",
+        "ALTER TABLE vehicles ADD COLUMN price_scrape_attempts INTEGER DEFAULT 0",
     ]
     with _conn() as c:
         for sql in migrations:
@@ -133,6 +134,34 @@ def get_all_settings(env_addendum: int = 0) -> dict:
     except (ValueError, TypeError):
         addendum = env_addendum
     return {"addendum_amount": addendum}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Price-scrape attempt tracking
+# ─────────────────────────────────────────────────────────────────────────────
+def get_scrape_attempts(vins: list[str]) -> dict[str, int]:
+    """Return {vin: price_scrape_attempts} for the given VINs."""
+    if not vins:
+        return {}
+    placeholders = ",".join("?" * len(vins))
+    with _conn() as c:
+        rows = c.execute(
+            f"SELECT vin, COALESCE(price_scrape_attempts,0) FROM vehicles WHERE vin IN ({placeholders})",
+            vins,
+        ).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def update_scrape_attempts(updates: dict[str, int]) -> None:
+    """Bulk-update price_scrape_attempts. Pass {vin: new_count}."""
+    if not updates:
+        return
+    with _conn() as c:
+        for vin, count in updates.items():
+            c.execute(
+                "UPDATE vehicles SET price_scrape_attempts=? WHERE vin=?",
+                (max(0, count), vin),
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

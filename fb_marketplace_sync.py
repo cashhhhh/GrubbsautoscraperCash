@@ -57,6 +57,7 @@ FB_API_VERSION           = os.getenv("FB_API_VERSION",  "v21.0")
 BATCH_SIZE               = int(os.getenv("BATCH_SIZE",               "50"))
 PRICE_SCRAPE_CONCURRENCY = int(os.getenv("PRICE_SCRAPE_CONCURRENCY", "3"))
 PRICE_SCRAPE_TIMEOUT_MS  = int(os.getenv("PRICE_SCRAPE_TIMEOUT_MS",  "60000"))
+MAX_SCRAPE_ATTEMPTS      = int(os.getenv("MAX_SCRAPE_ATTEMPTS",       "3"))
 CSV_OUTPUT_PATH          = os.getenv("CSV_OUTPUT_PATH", "inventory_feed.csv")
 # Only process RSS URLs whose domain contains this string.
 # Guards against accidentally pulling partner / other-store feeds.
@@ -354,12 +355,21 @@ async def _scrape_one(page, vehicle: Vehicle) -> Optional[str]:
     return None
 
 
-async def scrape_prices(vehicles: list[Vehicle], debug: bool = False) -> list[Vehicle]:
+async def scrape_prices(
+    vehicles: list[Vehicle],
+    debug: bool = False,
+    skip_vins: set[str] | None = None,
+) -> list[Vehicle]:
     """Scrape VDP pages for vehicles that still need a price."""
-    need_scrape = [v for v in vehicles if not v.price]
-    rss_found   = len(vehicles) - len(need_scrape)
+    skip_vins = skip_vins or set()
+    need_scrape = [v for v in vehicles if not v.price and v.vin not in skip_vins]
+    rss_found   = sum(1 for v in vehicles if v.price)
+    exhausted   = sum(1 for v in vehicles if not v.price and v.vin in skip_vins)
     if rss_found:
         print(f"[Playwright] {rss_found}/{len(vehicles)} prices already in RSS — skipping those.", flush=True)
+    if exhausted:
+        print(f"[Playwright] {exhausted} vehicles skipped — hit max scrape attempts ({MAX_SCRAPE_ATTEMPTS}x). "
+              f"Delete their entry from the DB or set MAX_SCRAPE_ATTEMPTS higher to retry.", flush=True)
     if not need_scrape:
         return vehicles
 
@@ -787,11 +797,21 @@ def main() -> None:
         sys.exit(1)
 
     # 2 — Scrape prices
+    _attempts: dict[str, int] = {}
+    _skip_vins: set[str] = set()
     if args.no_price_scrape:
         print("\n[2/4] Skipping price scraping (--no-price-scrape).")
     else:
         print("\n[2/4] Scraping vehicle prices with Playwright…")
-        vehicles = asyncio.run(scrape_prices(vehicles, debug=args.debug))
+        # Load past scrape-attempt counts from DB so we don't retry hopeless VINs
+        try:
+            import db as _db
+            _db.init_db()
+            _attempts = _db.get_scrape_attempts([v.vin for v in vehicles])
+            _skip_vins = {vin for vin, cnt in _attempts.items() if cnt >= MAX_SCRAPE_ATTEMPTS}
+        except Exception:
+            pass
+        vehicles = asyncio.run(scrape_prices(vehicles, debug=args.debug, skip_vins=_skip_vins))
 
     # 3 — CSV backup (always)
     print("\n[3/4] Saving CSV backup…")
@@ -818,6 +838,32 @@ def main() -> None:
         vehicle_dicts = [asdict(v) for v in vehicles]
         _db.upsert_vehicles(vehicle_dicts)
         priced_count = sum(1 for v in vehicles if v.price)
+
+        # Update scrape-attempt counters:
+        #   - vehicles that just got priced → reset to 0
+        #   - vehicles that were attempted but still have no price → increment
+        #   - vehicles that were skipped (in _skip_vins) → leave unchanged
+        try:
+            _attempt_updates: dict[str, int] = {}
+            _attempted_this_run: set[str] = set()
+            if not args.no_price_scrape:
+                _attempted_this_run = {v.vin for v in vehicles if v.vin not in _skip_vins}
+            for v in vehicles:
+                if v.vin not in _attempted_this_run:
+                    continue
+                if v.price:
+                    _attempt_updates[v.vin] = 0          # success — reset
+                else:
+                    prev = _attempts.get(v.vin, 0)
+                    _attempt_updates[v.vin] = prev + 1   # failure — increment
+            if _attempt_updates:
+                _db.update_scrape_attempts(_attempt_updates)
+                failed_new = sum(1 for c in _attempt_updates.values() if c >= MAX_SCRAPE_ATTEMPTS)
+                if failed_new:
+                    print(f"[DB] {failed_new} vehicles now at max attempts and will be skipped next run.", flush=True)
+        except Exception:
+            pass   # attempt tracking is best-effort
+
         _db.record_sync_run({
             "vehicles_found":    len(vehicles),
             "vehicles_priced":   priced_count,
