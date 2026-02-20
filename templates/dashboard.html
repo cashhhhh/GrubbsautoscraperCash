@@ -111,8 +111,8 @@
       </button>
     </nav>
 
-    <!-- Bottom status -->
-    <div class="p-4 border-t border-white/10">
+    <!-- Bottom status + settings gear -->
+    <div class="p-4 border-t border-white/10 space-y-2">
       <div class="text-xs text-slate-500 space-y-1">
         <div class="flex items-center gap-2">
           <span class="pulse-dot" :class="summary.last_sync_ok ? 'bg-emerald-400' : 'bg-red-400'"></span>
@@ -122,6 +122,12 @@
           Addendum: $<span x-text="fmt(summary.addendum_amount)"></span>
         </div>
       </div>
+      <!-- Settings button -->
+      <button class="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-sidebar-hover text-xs font-medium transition-all"
+        @click="settingsOpen=true">
+        <svg class="w-4 h-4 fill-current shrink-0" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        Settings
+      </button>
     </div>
   </aside>
 
@@ -300,6 +306,7 @@
                   <th class="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Mileage</th>
                   <th class="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Internet Price</th>
                   <th class="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">w/ Addendum</th>
+                  <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">% Market</th>
                   <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">FB Clicks</th>
                   <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Impressions</th>
                   <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Saves</th>
@@ -309,7 +316,7 @@
               </thead>
               <tbody class="divide-y divide-slate-50">
                 <template x-if="vehicles.length === 0">
-                  <tr><td colspan="12" class="py-12 text-center text-slate-400 text-sm">No vehicles match your filters.</td></tr>
+                  <tr><td colspan="13" class="py-12 text-center text-slate-400 text-sm">No vehicles match your filters.</td></tr>
                 </template>
                 <template x-for="v in vehicles" :key="v.vin">
                   <tr class="hover:bg-blue-50/40 transition-colors cursor-default group"
@@ -345,7 +352,12 @@
                     <!-- Internet Price -->
                     <td class="px-3 py-2.5 text-right">
                       <template x-if="v.price_ok">
-                        <span class="font-bold text-emerald-700 text-sm">$<span x-text="fmt(v.price_dollars)"></span></span>
+                        <div>
+                          <span class="font-bold text-emerald-700 text-sm">$<span x-text="fmt(v.effective_price)"></span></span>
+                          <template x-if="v.price_overridden">
+                            <span class="block badge bg-amber-100 text-amber-700 mt-0.5">Edited</span>
+                          </template>
+                        </div>
                       </template>
                       <template x-if="!v.price_ok">
                         <span class="badge bg-red-100 text-red-700">No Price</span>
@@ -353,17 +365,28 @@
                     </td>
                     <!-- w/ Addendum -->
                     <td class="px-3 py-2.5 text-right">
-                      <template x-if="v.price_with_addendum && v.addendum_amount > 0">
+                      <template x-if="v.price_with_addendum && v.effective_addendum > 0">
                         <div>
                           <span class="font-bold text-amber-700 text-sm">$<span x-text="fmt(v.price_with_addendum)"></span></span>
-                          <p class="text-xs text-amber-500">+$<span x-text="fmt(v.addendum_amount)"></span></p>
+                          <p class="text-xs text-amber-500">+$<span x-text="fmt(v.effective_addendum)"></span></p>
                         </div>
                       </template>
-                      <template x-if="!v.addendum_amount">
+                      <template x-if="!v.effective_addendum || v.effective_addendum === 0">
                         <span class="text-xs text-slate-300">—</span>
                       </template>
-                      <template x-if="v.addendum_amount && !v.price_with_addendum">
+                      <template x-if="v.effective_addendum > 0 && !v.price_with_addendum">
                         <span class="text-xs text-slate-300">—</span>
+                      </template>
+                    </td>
+                    <!-- % to Market -->
+                    <td class="px-3 py-2.5 text-center">
+                      <template x-if="v.pct_to_market !== null && v.pct_to_market !== undefined">
+                        <span class="badge font-mono"
+                          :class="v.pct_to_market > 5 ? 'bg-red-100 text-red-700' : v.pct_to_market < -5 ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'"
+                          x-text="(v.pct_to_market > 0 ? '+' : '') + v.pct_to_market.toFixed(1) + '%'"></span>
+                      </template>
+                      <template x-if="v.pct_to_market === null || v.pct_to_market === undefined">
+                        <button class="text-xs text-slate-300 hover:text-fb transition-colors" @click.stop="openModal(v,'edit')">Set&nbsp;MV</button>
                       </template>
                     </td>
                     <!-- Clicks -->
@@ -545,42 +568,82 @@
         <h2 class="text-lg font-bold text-slate-900 leading-tight"
             x-text="modal?.year + ' ' + modal?.make + ' ' + modal?.model + ' ' + (modal?.trim || '')"></h2>
         <p class="text-xs text-slate-400 mt-1" x-text="modal?.vin"></p>
-        <div class="flex items-center gap-2 mt-2">
+        <div class="flex items-center gap-2 mt-2 flex-wrap">
           <span class="badge"
             :class="modal?.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'"
             x-text="modal?.is_active ? 'Live on FB Marketplace' : 'Inactive'"></span>
-          <span class="badge"
-            :class="bodyBadge(modal?.body_style)"
-            x-text="modal?.body_style || '?'"></span>
+          <span class="badge" :class="bodyBadge(modal?.body_style)" x-text="modal?.body_style || '?'"></span>
           <span class="badge bg-slate-100 text-slate-600" x-text="modal?.condition"></span>
+          <!-- % to market badge -->
+          <template x-if="modal?.pct_to_market !== null && modal?.pct_to_market !== undefined">
+            <span class="badge font-mono"
+              :class="modal.pct_to_market > 5 ? 'bg-red-100 text-red-700' : modal.pct_to_market < -5 ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'"
+              x-text="(modal.pct_to_market > 0 ? '+' : '') + modal.pct_to_market.toFixed(1) + '% vs market'"></span>
+          </template>
         </div>
       </div>
       <button @click="modal=null" class="text-slate-400 hover:text-slate-700 transition-colors shrink-0">
         <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
       </button>
     </div>
-    <!-- body -->
-    <div class="overflow-y-auto p-6 space-y-5 text-sm">
+
+    <!-- Modal Tabs -->
+    <div class="flex border-b border-slate-100 px-6">
+      <button class="py-3 px-4 text-xs font-semibold border-b-2 transition-all mr-1"
+        :class="modalTab==='details' ? 'border-fb text-fb' : 'border-transparent text-slate-400 hover:text-slate-700'"
+        @click="modalTab='details'">Details</button>
+      <button class="py-3 px-4 text-xs font-semibold border-b-2 transition-all mr-1"
+        :class="modalTab==='edit' ? 'border-fb text-fb' : 'border-transparent text-slate-400 hover:text-slate-700'"
+        @click="modalTab='edit'">Edit / Pricing</button>
+      <button class="py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5"
+        :class="modalTab==='comps' ? 'border-fb text-fb' : 'border-transparent text-slate-400 hover:text-slate-700'"
+        @click="modalTab='comps'; loadComparables()">
+        Comparables
+        <span x-show="comparables.length > 0" class="badge bg-slate-200 text-slate-600 text-xs" x-text="comparables.length"></span>
+      </button>
+    </div>
+
+    <!-- ── DETAILS TAB ── -->
+    <div x-show="modalTab==='details'" class="overflow-y-auto p-6 space-y-5 text-sm">
       <!-- Price block -->
       <div class="grid grid-cols-3 gap-3">
         <div class="bg-slate-50 rounded-xl p-3 text-center">
-          <p class="text-xs text-slate-500 font-semibold">Internet Price</p>
+          <p class="text-xs text-slate-500 font-semibold">Effective Price</p>
           <template x-if="modal?.price_ok">
-            <p class="text-lg font-extrabold text-emerald-700 mt-1">$<span x-text="fmt(modal?.price_dollars)"></span></p>
+            <div>
+              <p class="text-lg font-extrabold text-emerald-700 mt-1">$<span x-text="fmt(modal?.effective_price)"></span></p>
+              <template x-if="modal?.price_overridden">
+                <p class="text-xs text-amber-600 mt-0.5">Override (feed: $<span x-text="fmt(modal?.price_dollars)"></span>)</p>
+              </template>
+            </div>
           </template>
           <template x-if="!modal?.price_ok">
             <p class="text-lg font-extrabold text-red-500 mt-1">Not Found</p>
           </template>
         </div>
-        <div class="bg-amber-50 rounded-xl p-3 text-center" x-show="modal?.addendum_amount > 0">
-          <p class="text-xs text-amber-600 font-semibold">Addendum</p>
-          <p class="text-lg font-extrabold text-amber-700 mt-1">+$<span x-text="fmt(modal?.addendum_amount)"></span></p>
+        <div class="bg-amber-50 rounded-xl p-3 text-center" x-show="modal?.effective_addendum > 0">
+          <p class="text-xs text-amber-600 font-semibold">Addendum<span x-show="modal?.addendum_overridden"> (custom)</span></p>
+          <p class="text-lg font-extrabold text-amber-700 mt-1">+$<span x-text="fmt(modal?.effective_addendum)"></span></p>
         </div>
-        <div class="bg-slate-800 rounded-xl p-3 text-center" x-show="modal?.addendum_amount > 0 && modal?.price_ok">
+        <div class="bg-slate-800 rounded-xl p-3 text-center" x-show="modal?.effective_addendum > 0 && modal?.price_ok">
           <p class="text-xs text-slate-400 font-semibold">Customer Price</p>
           <p class="text-lg font-extrabold text-white mt-1">$<span x-text="fmt(modal?.price_with_addendum)"></span></p>
         </div>
       </div>
+      <!-- Market value row -->
+      <template x-if="modal?.market_value">
+        <div class="bg-slate-50 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500">Market Value (KBB / Reference)</p>
+            <p class="text-base font-bold text-slate-800 mt-0.5">$<span x-text="fmt(modal?.market_value)"></span></p>
+          </div>
+          <template x-if="modal?.pct_to_market !== null && modal?.pct_to_market !== undefined">
+            <span class="badge text-base px-3 py-1"
+              :class="modal.pct_to_market > 5 ? 'bg-red-100 text-red-700' : modal.pct_to_market < -5 ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'"
+              x-text="(modal.pct_to_market > 0 ? '+' : '') + modal.pct_to_market.toFixed(1) + '%'"></span>
+          </template>
+        </div>
+      </template>
       <!-- Details grid -->
       <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
         <div><span class="text-slate-500">Stock #</span><span class="float-right font-semibold" x-text="modal?.stock_number || '—'"></span></div>
@@ -591,6 +654,13 @@
         <div><span class="text-slate-500">First Seen</span><span class="float-right font-semibold" x-text="modal?.first_seen ? fmtDate(modal.first_seen) : '—'"></span></div>
         <div><span class="text-slate-500">Last Seen</span><span class="float-right font-semibold" x-text="modal?.last_seen ? fmtDate(modal.last_seen) : '—'"></span></div>
       </div>
+      <!-- Notes display -->
+      <template x-if="modal?.notes">
+        <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+          <p class="text-xs font-semibold text-yellow-700 mb-1">Internal Notes</p>
+          <p class="text-xs text-slate-700" x-text="modal.notes"></p>
+        </div>
+      </template>
       <!-- FB Stats -->
       <div class="bg-fb/5 rounded-xl p-4">
         <p class="text-xs font-bold text-fb mb-3">Facebook Marketplace Performance</p>
@@ -610,12 +680,171 @@
         </div>
         <p class="text-xs text-slate-400 text-center mt-2" x-text="modal?.stats_date ? 'Stats as of ' + modal.stats_date : 'No stats yet — click Refresh FB Stats'"></p>
       </div>
-      <!-- Links -->
       <div class="flex gap-3">
         <a x-show="modal?.link" :href="modal?.link" target="_blank" rel="noopener"
-          class="btn-primary text-xs flex-1 justify-center">
-          View VDP ↗
-        </a>
+          class="btn-primary text-xs flex-1 justify-center">View VDP ↗</a>
+      </div>
+    </div>
+
+    <!-- ── EDIT TAB ── -->
+    <div x-show="modalTab==='edit'" class="overflow-y-auto p-6 space-y-5 text-sm">
+      <p class="text-xs text-slate-400">Changes save immediately and persist across syncs. Clear a field to revert to the default.</p>
+
+      <!-- Override Price -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Override Price <span class="text-slate-400 font-normal">(leave blank to use feed price: $<span x-text="fmt(modal?.price_dollars)"></span>)</span></label>
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+            <input type="number" min="0" step="1" x-model="editForm.price_override"
+              placeholder="e.g. 27500"
+              class="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          </div>
+          <button class="btn-ghost text-xs" @click="editForm.price_override=''; saveVehicle({clear_price:true})">Clear</button>
+        </div>
+      </div>
+
+      <!-- Market Value -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Market Value <span class="text-slate-400 font-normal">(KBB, MMR, or your reference price)</span></label>
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+            <input type="number" min="0" step="1" x-model="editForm.market_value"
+              placeholder="e.g. 26000"
+              class="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          </div>
+          <button class="btn-ghost text-xs" @click="editForm.market_value=''; saveVehicle({clear_market_value:true})">Clear</button>
+        </div>
+        <template x-if="editForm.market_value && editForm.price_override">
+          <p class="text-xs mt-1.5"
+            :class="((editForm.price_override - editForm.market_value)/editForm.market_value*100) > 5 ? 'text-red-600' : ((editForm.price_override - editForm.market_value)/editForm.market_value*100) < -5 ? 'text-emerald-600' : 'text-yellow-600'"
+            x-text="'Preview: ' + (((editForm.price_override - editForm.market_value)/editForm.market_value*100) > 0 ? '+' : '') + ((editForm.price_override - editForm.market_value)/editForm.market_value*100).toFixed(1) + '% vs market'"></p>
+        </template>
+      </div>
+
+      <!-- Addendum Override -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Addendum Override <span class="text-slate-400 font-normal">(leave blank to use global: $<span x-text="fmt(settings.addendum_amount)"></span>)</span></label>
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+            <input type="number" min="0" step="1" x-model="editForm.addendum_override"
+              placeholder="e.g. 1995"
+              class="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          </div>
+          <button class="btn-ghost text-xs" @click="editForm.addendum_override=''; saveVehicle({clear_addendum:true})">Clear</button>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Internal Notes</label>
+        <textarea x-model="editForm.notes" rows="3" placeholder="e.g. Certified, flood check done, price negotiated with wholesaler…"
+          class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb resize-none"></textarea>
+      </div>
+
+      <!-- Save / status -->
+      <div class="flex items-center gap-3">
+        <button class="btn-primary text-xs" @click="saveVehicle()" :disabled="savingVehicle">
+          <span x-show="!savingVehicle">Save Changes</span>
+          <span x-show="savingVehicle">Saving…</span>
+        </button>
+        <span x-show="saveMsg" class="text-xs text-emerald-600 font-semibold" x-text="saveMsg"></span>
+      </div>
+    </div>
+
+    <!-- ── COMPARABLES TAB ── -->
+    <div x-show="modalTab==='comps'" class="overflow-y-auto p-6 space-y-4 text-sm">
+      <div x-show="loadingComps" class="text-center text-slate-400 text-xs py-6 animate-pulse">Loading comparables…</div>
+      <div x-show="!loadingComps && comparables.length === 0" class="text-center text-slate-400 text-xs py-6">
+        No other active listings with the same make &amp; model found.
+      </div>
+      <template x-if="!loadingComps && comparables.length > 0">
+        <div>
+          <p class="text-xs text-slate-400 mb-3">
+            Other <strong x-text="modal?.make + ' ' + modal?.model"></strong> listings in your active catalog within ±4 years.
+          </p>
+          <div class="space-y-2">
+            <template x-for="c in comparables" :key="c.vin">
+              <div class="flex items-center gap-3 p-3 rounded-xl border"
+                :class="c.is_near_duplicate ? 'border-amber-300 bg-amber-50' : 'border-slate-100 bg-slate-50'">
+                <!-- thumb -->
+                <div class="w-14 h-10 rounded-lg overflow-hidden bg-slate-200 shrink-0">
+                  <img x-show="c.image_url" :src="c.image_url" class="w-full h-full object-cover" loading="lazy" />
+                </div>
+                <!-- info -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <p class="text-xs font-semibold text-slate-800" x-text="c.year + ' ' + c.make + ' ' + c.model + (c.trim ? ' ' + c.trim : '')"></p>
+                    <template x-if="c.is_near_duplicate">
+                      <span class="badge bg-amber-200 text-amber-800">⚠ Near Duplicate</span>
+                    </template>
+                  </div>
+                  <p class="text-xs text-slate-400" x-text="(c.mileage ? Number(c.mileage).toLocaleString() + ' mi · ' : '') + (c.exterior_color || '')"></p>
+                </div>
+                <!-- price -->
+                <div class="text-right shrink-0">
+                  <template x-if="c.effective_price">
+                    <p class="text-sm font-bold text-emerald-700">$<span x-text="Number(c.effective_price).toLocaleString()"></span></p>
+                  </template>
+                  <template x-if="!c.effective_price">
+                    <p class="text-xs text-slate-400">No price</p>
+                  </template>
+                  <!-- diff vs current -->
+                  <template x-if="c.effective_price && modal?.effective_price">
+                    <p class="text-xs"
+                      :class="((c.effective_price - modal.effective_price)/modal.effective_price*100) > 0 ? 'text-slate-500' : 'text-emerald-600'"
+                      x-text="(((c.effective_price - modal.effective_price)/modal.effective_price*100) > 0 ? '+' : '') + ((c.effective_price - modal.effective_price)/modal.effective_price*100).toFixed(1) + '% vs this'"></p>
+                  </template>
+                </div>
+                <a :href="c.link" target="_blank" rel="noopener" x-show="c.link" class="text-xs text-fb hover:underline shrink-0">VDP ↗</a>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- SETTINGS MODAL                                                          -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div x-show="settingsOpen" x-cloak
+  class="fixed inset-0 z-50 flex items-center justify-center p-4"
+  @keydown.escape.window="settingsOpen=false">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="settingsOpen=false"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" x-transition>
+    <div class="flex items-center justify-between p-6 border-b border-slate-100">
+      <h2 class="text-base font-bold text-slate-900">Dashboard Settings</h2>
+      <button @click="settingsOpen=false" class="text-slate-400 hover:text-slate-700">
+        <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+    <div class="p-6 space-y-5">
+      <!-- Global addendum -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Global Addendum Amount</label>
+        <p class="text-xs text-slate-400 mb-2">Applied to all vehicles unless overridden per-vehicle. Set to 0 to disable.</p>
+        <div class="flex gap-3 items-center">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+            <input type="number" min="0" step="1" x-model="settings.addendum_amount"
+              class="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          </div>
+          <button class="btn-primary text-sm" @click="saveSettings()" :disabled="savingSettings">
+            <span x-show="!savingSettings">Save</span>
+            <span x-show="savingSettings">Saving…</span>
+          </button>
+        </div>
+        <p x-show="settingsSaveMsg" class="text-xs text-emerald-600 font-semibold mt-2" x-text="settingsSaveMsg"></p>
+      </div>
+      <!-- Info -->
+      <div class="bg-slate-50 rounded-xl p-4 text-xs text-slate-500 space-y-1">
+        <p><strong class="text-slate-700">Per-vehicle overrides</strong> — open any vehicle, go to "Edit / Pricing" tab.</p>
+        <p><strong class="text-slate-700">Market Value (% to Market)</strong> — enter a KBB or reference price per vehicle on the Edit tab. The % badge will appear automatically.</p>
+        <p><strong class="text-slate-700">Comparables</strong> — same make &amp; model within ±4 years, from your active catalog.</p>
       </div>
     </div>
   </div>
@@ -635,11 +864,24 @@ function dashboard() {
     makes: [],
     years: [],
     modal: null,
+    modalTab: 'details',
     syncRunning: false,
     statsRunning: false,
     statusMsg: '',
     lastRefreshed: '—',
     filters: { search: '', make: '', year: '', condition: '', body_style: '' },
+    // settings modal
+    settingsOpen: false,
+    settings: { addendum_amount: 0 },
+    savingSettings: false,
+    settingsSaveMsg: '',
+    // vehicle edit
+    editForm: { price_override: '', addendum_override: '', market_value: '', notes: '' },
+    savingVehicle: false,
+    saveMsg: '',
+    // comparables
+    comparables: [],
+    loadingComps: false,
 
     get bodyStyles() {
       const set = new Set(this.vehicles.map(v => v.body_style).filter(Boolean))
@@ -650,7 +892,7 @@ function dashboard() {
     },
 
     async init() {
-      await Promise.all([this.loadSummary(), this.loadVehicles(), this.loadMeta(), this.loadRuns()])
+      await Promise.all([this.loadSummary(), this.loadVehicles(), this.loadMeta(), this.loadRuns(), this.loadSettings()])
       this.lastRefreshed = new Date().toLocaleTimeString()
       this.$nextTick(() => this.drawCharts())
     },
@@ -663,6 +905,29 @@ function dashboard() {
     async loadSummary() {
       const r = await fetch('/api/summary')
       this.summary = await r.json()
+    },
+
+    async loadSettings() {
+      const r = await fetch('/api/settings')
+      this.settings = await r.json()
+    },
+
+    async saveSettings() {
+      this.savingSettings = true
+      this.settingsSaveMsg = ''
+      const r = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ addendum_amount: parseInt(this.settings.addendum_amount) || 0 })
+      })
+      const d = await r.json()
+      this.settings = d
+      this.summary.addendum_amount = d.addendum_amount
+      this.savingSettings = false
+      this.settingsSaveMsg = 'Saved!'
+      setTimeout(() => this.settingsSaveMsg = '', 3000)
+      // reload vehicles to recompute prices
+      this.loadVehicles()
     },
 
     async loadVehicles() {
@@ -691,7 +956,68 @@ function dashboard() {
       this.loadVehicles()
     },
 
-    openModal(v) { this.modal = v },
+    openModal(v, tab='details') {
+      this.modal = v
+      this.modalTab = tab
+      this.comparables = []
+      this.saveMsg = ''
+      this.editForm = {
+        price_override:    v.price_override   != null ? String(v.price_override)   : '',
+        addendum_override: v.addendum_override != null ? String(v.addendum_override): '',
+        market_value:      v.market_value      != null ? String(v.market_value)     : '',
+        notes:             v.notes || '',
+      }
+      if (tab === 'comps') this.loadComparables()
+    },
+
+    async loadComparables() {
+      if (!this.modal) return
+      this.loadingComps = true
+      const r = await fetch('/api/comparable/' + this.modal.vin)
+      const d = await r.json()
+      this.comparables = d.comparables || []
+      this.loadingComps = false
+    },
+
+    async saveVehicle(extra = {}) {
+      if (!this.modal) return
+      this.savingVehicle = true
+      this.saveMsg = ''
+      const payload = {
+        ...extra,
+        notes: this.editForm.notes,
+      }
+      if (!extra.clear_price && this.editForm.price_override !== '')
+        payload.price_override = parseInt(this.editForm.price_override) || null
+      if (!extra.clear_addendum && this.editForm.addendum_override !== '')
+        payload.addendum_override = parseInt(this.editForm.addendum_override) || null
+      if (!extra.clear_market_value && this.editForm.market_value !== '')
+        payload.market_value = parseInt(this.editForm.market_value) || null
+
+      const r = await fetch('/api/vehicle/' + this.modal.vin + '/update', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      })
+      if (r.ok) {
+        const updated = await r.json()
+        this.modal = updated
+        // update in vehicle list too
+        const idx = this.vehicles.findIndex(v => v.vin === updated.vin)
+        if (idx >= 0) this.vehicles[idx] = updated
+        this.editForm = {
+          price_override:    updated.price_override    != null ? String(updated.price_override)    : '',
+          addendum_override: updated.addendum_override != null ? String(updated.addendum_override) : '',
+          market_value:      updated.market_value      != null ? String(updated.market_value)      : '',
+          notes:             updated.notes || '',
+        }
+        this.saveMsg = 'Saved!'
+        setTimeout(() => this.saveMsg = '', 3000)
+      } else {
+        this.saveMsg = 'Error saving — try again'
+      }
+      this.savingVehicle = false
+    },
 
     async triggerSync() {
       if (this.syncRunning) return
