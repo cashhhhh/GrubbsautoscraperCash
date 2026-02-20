@@ -1510,68 +1510,187 @@ function dashboard() {
         return
       }
 
-      const basePrice = Number(v.effective_price)
-      const addendum = Number(this.mockPencil.addendumAmount || 0)
-      const taxRate = Number(this.mockPencil.taxRate || 0) / 100
-      const taxAmount = Number(((basePrice + addendum) * taxRate).toFixed(2))
-      const docFee = Number(this.mockPencil.docFeeAmount || 0)
-      const outTheDoor = Number((basePrice + addendum + taxAmount + docFee).toFixed(2))
+      const basePrice      = Number(v.effective_price)
+      const addendum       = Number(this.mockPencil.addendumAmount || 0)
+      const taxRate        = Number(this.mockPencil.taxRate || 0) / 100
+      const taxAmount      = Number(((basePrice + addendum) * taxRate).toFixed(2))
+      const docFee         = Number(this.mockPencil.docFeeAmount || 0)
+      const downPayment    = Number(this.mockPencil.downPayment || 0)
+      const outTheDoor     = Number((basePrice + addendum + taxAmount + docFee).toFixed(2))
+      const amountFinanced = Math.max(0, outTheDoor - downPayment)
+      const apr            = Number(this.mockPencil.apr || 0)
+
+      const calcPmt = (amt, a, n) => {
+        const r = a / 100 / 12
+        if (r <= 0) return amt / n
+        return amt * r / (1 - Math.pow(1 + r, -n))
+      }
+      const fmt = n => Number(n || 0).toLocaleString('en-US', { style:'currency', currency:'USD', maximumFractionDigits: 0 })
+      const fmtD = n => Number(n || 0).toLocaleString('en-US', { style:'currency', currency:'USD' })
+
       const vehicleLabel = `${v.year || ''} ${v.make || ''} ${v.model || ''}`.trim()
-      const trimLabel = v.trim ? ` ${v.trim}` : ''
-      const stock = v.stock_number || 'N/A'
-      const vin = v.vin || 'N/A'
+      const fullLabel    = v.trim ? `${vehicleLabel} ${v.trim}` : vehicleLabel
+      const stock        = v.stock_number || 'N/A'
+      const vin          = v.vin || 'N/A'
+      const mileage      = v.mileage ? Number(v.mileage).toLocaleString() + ' mi' : '—'
+      const color        = v.exterior_color || '—'
+      const dateStr      = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' })
+      const imgUrl       = v.image_url || ''
+
+      const addendumLabel = this.mockPencil.addendumLabel || 'Addendum'
+      const taxLabel      = this.mockPencil.taxLabel || 'Sales Tax'
+      const docFeeLabel   = this.mockPencil.docFeeLabel || 'Doc Fee'
+
+      const terms  = [48, 60, 72, 84]
+      const pmtCols = terms.map(t => {
+        const pmt = calcPmt(amountFinanced, apr, t)
+        const hi  = t === 72
+        return `<td style="padding:16px 12px;text-align:center;background:${hi?'#1877F2':'#f8fafc'};border-radius:10px;vertical-align:top;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${hi?'rgba(255,255,255,.75)':'#94a3b8'};margin-bottom:6px;">${t} mo</div>
+          <div style="font-size:22px;font-weight:800;color:${hi?'#fff':'#0f172a'};line-height:1;">${fmtD(pmt)}</div>
+          <div style="font-size:10px;color:${hi?'rgba(255,255,255,.65)':'#94a3b8'};margin-top:4px;">per month</div>
+        </td>`
+      }).join('<td style="width:8px;"></td>')
 
       const html = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Mock Pencil - ${vehicleLabel}</title>
-    <style>
-      body { font-family: Inter, Arial, sans-serif; margin: 28px; color: #0f172a; }
-      .card { max-width: 760px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
-      .head { background: #0f172a; color: #fff; padding: 22px; }
-      .head h1 { margin: 0; font-size: 22px; }
-      .head p { margin: 6px 0 0; color: #cbd5e1; font-size: 13px; }
-      .meta { padding: 18px 22px 8px; font-size: 13px; color: #334155; }
-      table { width: calc(100% - 44px); margin: 10px 22px 20px; border-collapse: collapse; }
-      th, td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
-      th { text-align: left; color: #475569; font-weight: 600; }
-      td:last-child, th:last-child { text-align: right; }
-      .otd td { font-size: 18px; font-weight: 700; color: #0f172a; border-top: 2px solid #94a3b8; }
-      .foot { padding: 0 22px 20px; font-size: 12px; color: #64748b; line-height: 1.45; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <div class="head">
-        <h1>Grubbs INFINITI — Mock Pencil</h1>
-        <p>Prepared for customer review</p>
-      </div>
-      <div class="meta">
-        <div><strong>Vehicle:</strong> ${vehicleLabel}${trimLabel}</div>
-        <div><strong>Stock:</strong> ${stock} &nbsp;&nbsp; <strong>VIN:</strong> ${vin}</div>
-        <div><strong>Date:</strong> ${new Date().toLocaleString()}</div>
-      </div>
-      <table>
-        <tr><th>Internet Price</th><td>${this.fmtMoney(basePrice)}</td></tr>
-        <tr><th>Addendum</th><td>${this.fmtMoney(addendum)}</td></tr>
-        <tr><th>State Tax (6.25%)</th><td>${this.fmtMoney(taxAmount)}</td></tr>
-        <tr><th>Doc Fee</th><td>${this.fmtMoney(docFee)}</td></tr>
-        <tr class="otd"><td>Estimated Out-the-Door</td><td>${this.fmtMoney(outTheDoor)}</td></tr>
-      </table>
-      <div class="foot">
-        This mock pencil is an estimate and is subject to lender approval, final tax/title calculations,
-        and availability at time of delivery.
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Pricing Worksheet — ${fullLabel}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Inter',Arial,sans-serif;background:#f1f5f9;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .page{max-width:780px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.10);}
+    /* Header */
+    .hd{background:#0f172a;padding:28px 32px;display:flex;align-items:center;justify-content:space-between;}
+    .hd-left h1{font-size:20px;font-weight:800;color:#fff;letter-spacing:-.01em;}
+    .hd-left p{font-size:12px;color:#94a3b8;margin-top:4px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;}
+    .hd-right{text-align:right;}
+    .hd-right .badge{display:inline-block;background:#1877F2;color:#fff;font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;letter-spacing:.04em;text-transform:uppercase;}
+    .hd-right .date{font-size:11px;color:#64748b;margin-top:6px;}
+    /* Vehicle strip */
+    .veh{display:flex;align-items:stretch;border-bottom:1px solid #e2e8f0;}
+    .veh-img{width:220px;min-height:140px;flex-shrink:0;overflow:hidden;background:#f8fafc;}
+    .veh-img img{width:100%;height:100%;object-fit:cover;display:block;}
+    .veh-img-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}
+    .veh-img-placeholder svg{opacity:.18;}
+    .veh-info{flex:1;padding:20px 24px;display:flex;flex-direction:column;justify-content:center;gap:6px;}
+    .veh-name{font-size:18px;font-weight:800;color:#0f172a;line-height:1.2;}
+    .veh-sub{font-size:12px;color:#64748b;font-weight:500;}
+    .veh-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+    .pill{background:#f1f5f9;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;color:#475569;}
+    /* Body */
+    .body{padding:28px 32px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+    /* Pricing table */
+    .section-title{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;}
+    .price-table{width:100%;border-collapse:collapse;}
+    .price-table tr td{padding:9px 0;font-size:13px;border-bottom:1px solid #f1f5f9;}
+    .price-table tr:last-child td{border-bottom:none;}
+    .price-table .lbl{color:#475569;font-weight:500;}
+    .price-table .amt{text-align:right;font-weight:600;color:#0f172a;}
+    .price-table .otd td{padding-top:13px;font-size:15px;font-weight:800;color:#0f172a;border-top:2px solid #e2e8f0;border-bottom:none;}
+    .price-table .down td{font-size:12px;color:#64748b;font-weight:500;}
+    .price-table .fin td{font-size:14px;font-weight:700;color:#1877F2;}
+    /* Payment cards */
+    .payments-wrap{display:flex;flex-direction:column;gap:12px;}
+    .apr-note{font-size:11px;color:#94a3b8;font-weight:500;text-align:center;}
+    /* Signatures */
+    .sigs{padding:0 32px 28px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+    .sig-line{border-top:1px solid #cbd5e1;padding-top:8px;font-size:11px;color:#94a3b8;font-weight:500;}
+    /* Footer */
+    .foot{background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;line-height:1.6;}
+    @media print{body{background:#fff;}.page{box-shadow:none;margin:0;border-radius:0;}}
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="hd">
+    <div class="hd-left">
+      <h1>Grubbs INFINITI</h1>
+      <p>Pricing Worksheet</p>
+    </div>
+    <div class="hd-right">
+      <div class="badge">Mock Pencil</div>
+      <div class="date">${dateStr}</div>
+    </div>
+  </div>
+
+  <!-- Vehicle strip -->
+  <div class="veh">
+    <div class="veh-img">
+      ${imgUrl
+        ? `<img src="${imgUrl}" alt="${fullLabel}" />`
+        : `<div class="veh-img-placeholder"><svg width="64" height="64" viewBox="0 0 24 24" fill="#0f172a"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg></div>`
+      }
+    </div>
+    <div class="veh-info">
+      <div class="veh-name">${fullLabel}</div>
+      <div class="veh-sub">Stock #${stock} &nbsp;·&nbsp; ${vin}</div>
+      <div class="veh-meta">
+        ${mileage !== '—' ? `<span class="pill">${mileage}</span>` : ''}
+        ${color !== '—' ? `<span class="pill">${color}</span>` : ''}
+        ${v.condition ? `<span class="pill" style="text-transform:capitalize">${v.condition}</span>` : ''}
       </div>
     </div>
-  </body>
+  </div>
+
+  <!-- Body: pricing + payments -->
+  <div class="body">
+
+    <!-- Pricing breakdown -->
+    <div>
+      <div class="section-title">Price Breakdown</div>
+      <table class="price-table">
+        <tr><td class="lbl">Internet Price</td><td class="amt">${fmt(basePrice)}</td></tr>
+        ${addendum > 0 ? `<tr><td class="lbl">${addendumLabel}</td><td class="amt">${fmt(addendum)}</td></tr>` : ''}
+        <tr><td class="lbl">${taxLabel} (${Number(this.mockPencil.taxRate||0).toFixed(2)}%)</td><td class="amt">${fmt(taxAmount)}</td></tr>
+        ${docFee > 0 ? `<tr><td class="lbl">${docFeeLabel}</td><td class="amt">${fmt(docFee)}</td></tr>` : ''}
+        <tr class="otd"><td>Out-the-Door</td><td style="text-align:right">${fmt(outTheDoor)}</td></tr>
+        ${downPayment > 0 ? `<tr class="down"><td>Down Payment</td><td style="text-align:right">− ${fmt(downPayment)}</td></tr>` : ''}
+        ${downPayment > 0 ? `<tr class="fin"><td>Amount Financed</td><td style="text-align:right">${fmt(amountFinanced)}</td></tr>` : ''}
+      </table>
+    </div>
+
+    <!-- Payment options -->
+    <div class="payments-wrap">
+      <div class="section-title">Monthly Payment Options</div>
+      <table style="width:100%;border-collapse:separate;border-spacing:6px;">
+        <tr>${pmtCols}</tr>
+      </table>
+      <div class="apr-note">${Number(apr).toFixed(2)}% APR · Based on ${fmt(amountFinanced)} financed${downPayment > 0 ? ` · ${fmt(downPayment)} down` : ''}</div>
+    </div>
+
+  </div>
+
+  <!-- Signature lines -->
+  <div class="sigs">
+    <div>
+      <div class="sig-line">Customer Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div>
+    </div>
+    <div>
+      <div class="sig-line">Sales Associate &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="foot">
+    This worksheet is an estimate only and does not constitute a contract or commitment. Pricing, taxes, fees, and payment amounts are subject to change and contingent upon credit approval, final tax and title calculations, lender participation, and vehicle availability at time of delivery. All payments based on the APR and term shown. Actual rate may vary based on credit profile.
+  </div>
+
+</div>
+</body>
 </html>`
 
       const blob = new Blob([html], { type: 'text/html' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `mock-pencil-${(stock !== 'N/A' ? stock : vin).replace(/[^a-z0-9-]/gi, '_')}.html`
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `pencil-${(stock !== 'N/A' ? stock : vin).replace(/[^a-z0-9-]/gi, '_')}.html`
       a.click()
       URL.revokeObjectURL(url)
     },
