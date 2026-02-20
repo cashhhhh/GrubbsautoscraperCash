@@ -254,6 +254,125 @@ def fetch_rss() -> list[Vehicle]:
     return all_vehicles
 
 
+def fetch_vehicles_from_api() -> list[Vehicle]:
+    """
+    Build the vehicle list directly from the DealerOn inventory API.
+    Replaces RSS as the primary vehicle source so VINs always match what
+    the price API returns (RSS can include unlisted/wholesale inventory
+    that never appears in the search-page API).
+
+    Each DisplayCard.VehicleCard contains:
+      VehicleVin, VehicleName, VehicleYear/Make/Model/Trim, Mileage,
+      ExteriorColorLabel, VehicleDetailUrl, VehicleImageModel.PhotoList,
+      VehiclePriceLibrary (base64), VehicleType ("used"/"new"), etc.
+    """
+    vehicles: list[Vehicle] = []
+    seen_vins: set[str] = set()
+    base_url = DEALERON_API_URL.format(
+        dealer_id=DEALERON_DEALER_ID,
+        page_id=DEALERON_PAGE_ID,
+    )
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    page_num    = 1
+    total_pages = 1
+
+    while page_num <= total_pages:
+        url = base_url if page_num == 1 else f"{base_url}&pn={page_num}"
+        print(f"  [API] Fetching vehicles page {page_num}/{total_pages}: {url}", flush=True)
+        try:
+            resp = requests.get(url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as exc:
+            print(f"  [API] ERROR on page {page_num}: {exc}", flush=True)
+            break
+
+        if page_num == 1:
+            paging = (data.get("Paging") or {}).get("PaginationDataModel") or {}
+            total_pages = paging.get("TotalPages") or 1
+
+        cards = data.get("DisplayCards") or []
+        found_this_page = 0
+
+        for card in cards:
+            if card.get("IsAdCard"):
+                continue
+            v = card.get("VehicleCard") or {}
+            vin = (v.get("VehicleVin") or "").strip().upper()
+            if not vin or vin in seen_vins:
+                continue
+
+            # ── Price (base64 VehiclePriceLibrary) ──────────────────────────
+            price: Optional[str] = None
+            price_lib = v.get("VehiclePriceLibrary") or ""
+            if price_lib:
+                try:
+                    decoded = base64.b64decode(price_lib).decode("utf-8")
+                    m = re.search(r"Selling Price:([\d.]+)", decoded)
+                    if m:
+                        val = float(m.group(1))
+                        if 2_500 < val < 500_000:
+                            price = f"{int(val)} USD"
+                except Exception:
+                    pass
+
+            # ── VDP URL ─────────────────────────────────────────────────────
+            link = v.get("VehicleDetailUrl") or ""
+            if not link:
+                img_model = v.get("VehicleImageModel") or {}
+                link = img_model.get("VehicleDetailUrl") or ""
+
+            # ── Full-size first photo ───────────────────────────────────────
+            image_url = ""
+            img_model  = v.get("VehicleImageModel") or {}
+            carousel   = img_model.get("VehicleImageCarouselModel") or {}
+            photo_list = carousel.get("PhotoList") or []
+            if photo_list:
+                image_url = DEALER_BASE_URL.rstrip("/") + photo_list[0]
+            else:
+                thumb = img_model.get("VehiclePhotoSrc") or ""
+                if thumb:
+                    image_url = DEALER_BASE_URL.rstrip("/") + re.sub(r"/thumbs/(\d+\.jpg)$", r"/\1", thumb)
+
+            # ── Mileage (strip non-digits) ──────────────────────────────────
+            mileage = re.sub(r"[^\d]", "", v.get("Mileage") or "0") or "0"
+
+            # ── Description ─────────────────────────────────────────────────
+            desc_parts = [p for p in [v.get("VehicleBodyStyle"), v.get("VehicleEngine")] if p]
+            description = ", ".join(desc_parts)
+
+            vehicle = Vehicle(
+                vin=vin,
+                title=(v.get("VehicleName") or
+                       f"{v.get('VehicleYear','')} {v.get('VehicleMake','')} {v.get('VehicleModel','')}".strip()),
+                link=link,
+                stock_number=v.get("VehicleStockNumber") or vin,
+                mileage=mileage,
+                exterior_color=v.get("ExteriorColorLabel") or "",
+                image_url=image_url,
+                year=str(v.get("VehicleYear") or ""),
+                make=v.get("VehicleMake") or "",
+                model=v.get("VehicleModel") or "",
+                trim=v.get("VehicleTrim") or "",
+                description=description,
+                price=price,
+                condition=(v.get("VehicleType") or "used").lower(),
+                body_style=v.get("VehicleBodyStyle") or "",
+            )
+            vehicles.append(vehicle)
+            seen_vins.add(vin)
+            found_this_page += 1
+
+        priced = sum(1 for veh in vehicles if veh.price)
+        print(f"  [API] Page {page_num}: {found_this_page} vehicles added "
+              f"(total {len(vehicles)}, {priced} with price)", flush=True)
+        if found_this_page == 0:
+            break   # Only ads or empty — stop paging
+        page_num += 1
+
+    return vehicles
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 2 — Scrape prices with Playwright
 # ──────────────────────────────────────────────────────────────────────────────
@@ -340,8 +459,9 @@ def _fetch_prices_from_api() -> dict[str, str]:
         page_id=DEALERON_PAGE_ID,
     )
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    page_num   = 1
+    page_num    = 1
     total_pages = 1
+    total_count = 0
 
     while page_num <= total_pages:
         url = base_url if page_num == 1 else f"{base_url}&pn={page_num}"
@@ -354,20 +474,25 @@ def _fetch_prices_from_api() -> dict[str, str]:
             print(f"  [API] ERROR on page {page_num}: {exc}", flush=True)
             break
 
-        # Update total page count from pagination metadata
-        paging = (data.get("Paging") or {}).get("PaginationDataModel") or {}
-        total_pages = paging.get("TotalPages") or 1
-        total_count = paging.get("TotalCount") or 0
+        # Only trust TotalPages from page 1 — later pages can report stale/different values
+        if page_num == 1:
+            paging = (data.get("Paging") or {}).get("PaginationDataModel") or {}
+            total_pages = paging.get("TotalPages") or 1
+            total_count = paging.get("TotalCount") or 0
 
         cards = data.get("DisplayCards") or []
         found_this_page = 0
+        vehicle_cards_seen = 0
 
         for card in cards:
             if card.get("IsAdCard"):
                 continue
             v = card.get("VehicleCard") or {}
             vin = (v.get("VehicleVin") or "").strip().upper()
-            if not vin or vin in vin_prices:
+            if not vin:
+                continue
+            vehicle_cards_seen += 1
+            if vin in vin_prices:
                 continue
 
             # Primary: VehiclePriceLibrary is base64 "Selling Price:15995.0;..."
@@ -405,7 +530,10 @@ def _fetch_prices_from_api() -> dict[str, str]:
                 pass
 
         print(f"  [API] Page {page_num}: {found_this_page} new prices "
-              f"(running total {len(vin_prices)}/{total_count})", flush=True)
+              f"({vehicle_cards_seen} vehicle cards, running total {len(vin_prices)}/{total_count})",
+              flush=True)
+        if vehicle_cards_seen == 0:
+            break   # Page returned only ads or was empty — stop paging
         page_num += 1
 
     return vin_prices
@@ -820,9 +948,12 @@ def main() -> None:
     t_start = time.time()
     success = True
 
-    # 1 — Fetch RSS
-    print("\n[1/4] Fetching inventory from DealerOn RSS feed…")
-    vehicles = fetch_rss()
+    # 1 — Fetch inventory (API first; RSS fallback)
+    print("\n[1/4] Fetching inventory from DealerOn API…")
+    vehicles = fetch_vehicles_from_api()
+    if not vehicles:
+        print("[API] No vehicles from API — falling back to RSS feed…")
+        vehicles = fetch_rss()
     if not vehicles:
         print("No vehicles found. Exiting.")
         sys.exit(1)
