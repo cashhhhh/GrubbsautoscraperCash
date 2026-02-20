@@ -14,9 +14,15 @@ import re
 import sqlite3
 from datetime import datetime
 
-from passlib.context import CryptContext
+import bcrypt as _bcrypt
 
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _hash_password(password: str) -> str:
+    return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    return _bcrypt.checkpw(password.encode(), hashed.encode())
 
 DB_PATH = os.getenv("DB_PATH", "inventory.db")
 
@@ -143,14 +149,14 @@ def get_user(username: str) -> dict | None:
 def verify_password(username: str, password: str) -> dict | None:
     """Return the user dict if credentials are valid, else None."""
     user = get_user(username)
-    if user and _pwd_ctx.verify(password, user["password_hash"]):
+    if user and _verify_password(password, user["password_hash"]):
         return user
     return None
 
 
 def create_user(username: str, password: str, is_admin: bool = False) -> bool:
     """Hash *password* and insert a new user. Returns False if username taken."""
-    hashed = _pwd_ctx.hash(password)
+    hashed = _hash_password(password)
     now = datetime.utcnow().isoformat(timespec="seconds")
     try:
         with _conn() as c:
@@ -178,7 +184,7 @@ def list_users() -> list[dict]:
 
 
 def change_password(username: str, new_password: str) -> bool:
-    hashed = _pwd_ctx.hash(new_password)
+    hashed = _hash_password(new_password)
     with _conn() as c:
         cur = c.execute(
             "UPDATE users SET password_hash=? WHERE username=? COLLATE NOCASE",
