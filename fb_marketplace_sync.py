@@ -407,7 +407,7 @@ def _fb_item(v: Vehicle) -> dict:
         "url":            v.link,
         "image_url":      v.image_url,
         "description":    v.description,
-        "availability":   "available",
+        "availability":   "in stock",
         "condition":      v.condition,
         "price":          price_cents,
         "brand":          v.make,
