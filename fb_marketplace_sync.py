@@ -36,7 +36,14 @@ load_dotenv()
 # ──────────────────────────────────────────────────────────────────────────────
 # Config  (override any of these in .env)
 # ──────────────────────────────────────────────────────────────────────────────
-RSS_URL                  = os.getenv("RSS_URL",         "https://www.infinitiofsanantonio.com/rss-usedinventory.aspx")
+# Comma-separated list of RSS feed URLs to pull from.
+# Defaults to both used and new inventory so pricier cars are included.
+_rss_urls_env = os.getenv(
+    "RSS_URLS",
+    "https://www.infinitiofsanantonio.com/rss-usedinventory.aspx,"
+    "https://www.infinitiofsanantonio.com/rss-newinventory.aspx",
+)
+RSS_URLS = [u.strip() for u in _rss_urls_env.split(",") if u.strip()]
 DEALER_BASE_URL          = os.getenv("DEALER_BASE_URL", "https://www.infinitiofsanantonio.com")
 FB_ACCESS_TOKEN          = os.getenv("FB_ACCESS_TOKEN", "")
 FB_CATALOG_ID            = os.getenv("FB_CATALOG_ID",   "")
@@ -80,17 +87,17 @@ class Vehicle:
     trim:           str = ""
     description:    str = ""
     price:          Optional[str] = None   # "24995 USD"
+    condition:      str = "used"           # "new" or "used"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 1 — Parse RSS feed
 # ──────────────────────────────────────────────────────────────────────────────
-def fetch_rss() -> list[Vehicle]:
-    """Fetch and parse the DealerOn used-inventory RSS feed."""
-    resp = requests.get(RSS_URL, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+def _parse_rss_feed(url: str, condition: str = "used") -> list[Vehicle]:
+    """Fetch one RSS feed URL and return a list of Vehicles."""
+    resp = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
     resp.raise_for_status()
 
-    # Strip any BOM / leading whitespace that would break ET
     raw = resp.text.lstrip("\ufeff").strip()
     root = ET.fromstring(raw)
 
@@ -189,11 +196,31 @@ def fetch_rss() -> list[Vehicle]:
             trim=trim,
             description=description,
             price=rss_price,
+            condition=condition,
         ))
 
-    rss_prices = sum(1 for v in vehicles if v.price)
-    print(f"[RSS] Parsed {len(vehicles)} vehicles ({rss_prices} with price in feed)", flush=True)
     return vehicles
+
+
+def fetch_rss() -> list[Vehicle]:
+    """Fetch all configured RSS feeds and return deduplicated vehicles."""
+    seen_vins: set[str] = set()
+    all_vehicles: list[Vehicle] = []
+    for url in RSS_URLS:
+        label = url.split("/")[-1]   # e.g. rss-usedinventory.aspx
+        try:
+            condition = "new" if "newinventory" in url else "used"
+            batch = _parse_rss_feed(url, condition=condition)
+            new = [v for v in batch if v.vin not in seen_vins]
+            seen_vins.update(v.vin for v in new)
+            all_vehicles.extend(new)
+            print(f"[RSS] {label}: {len(batch)} vehicles ({len(new)} new after dedup)", flush=True)
+        except Exception as exc:
+            print(f"[RSS] WARN — could not fetch {url}: {exc}", flush=True)
+
+    rss_prices = sum(1 for v in all_vehicles if v.price)
+    print(f"[RSS] Total: {len(all_vehicles)} vehicles ({rss_prices} with price in feed)", flush=True)
+    return all_vehicles
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -374,7 +401,7 @@ def _fb_item(v: Vehicle) -> dict:
         "title":          v.title,
         "description":    v.description,
         "availability":   "in stock",
-        "condition":      "used",
+        "condition":      v.condition,
         "price":          price_str,
         "link":           v.link,
         "image_link":     v.image_url,
@@ -388,7 +415,7 @@ def _fb_item(v: Vehicle) -> dict:
         "exterior_color": v.exterior_color,
         "vin":            v.vin,
         "vehicle_type":   "car_truck",
-        "state_of_vehicle": "used",
+        "state_of_vehicle": v.condition,
     }
 
 
