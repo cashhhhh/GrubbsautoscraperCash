@@ -62,6 +62,12 @@ CSV_OUTPUT_PATH          = os.getenv("CSV_OUTPUT_PATH", "inventory_feed.csv")
 # Only process RSS URLs whose domain contains this string.
 # Guards against accidentally pulling partner / other-store feeds.
 SA_DOMAIN_FILTER         = os.getenv("SA_DOMAIN_FILTER", "infinitiofsanantonio.com")
+# Used-inventory search page — scrape prices from here instead of individual VDPs
+SEARCH_PAGE_URL          = os.getenv(
+    "SEARCH_PAGE_URL",
+    "https://www.infinitiofsanantonio.com/searchused.aspx"
+    "?Dealership=Grubbs%20INFINITI%20of%20San%20Antonio",
+)
 
 # DealerOn price selectors — tried in order, first match wins
 PRICE_SELECTORS = [
@@ -309,50 +315,184 @@ async def _price_from_js(page) -> Optional[str]:
     return None
 
 
-async def _scrape_one(page, vehicle: Vehicle) -> Optional[str]:
-    """Return price as '24995 USD', or None if not found."""
+async def _bulk_prices_from_search_page(ctx) -> dict[str, str]:
+    """
+    Load the dealership used-inventory search page ONCE and return
+    {vin: 'NNNNN USD'} for every vehicle found.
+
+    Strategy 1 — intercept inventory JSON API responses (fast, zero DOM work).
+    Strategy 2 — JS-based DOM extraction of visible vehicle cards + auto-pagination.
+    """
+    page = await ctx.new_page()
+    vin_prices: dict[str, str] = {}
+    api_hits: list[dict] = []
+
+    # ── Strategy 1: intercept JSON responses that look like inventory ─────────
+    async def on_response(response):
+        if response.status != 200:
+            return
+        ct = response.headers.get("content-type", "")
+        if "json" not in ct:
+            return
+        url_l = response.url.lower()
+        if not any(k in url_l for k in ("inventory", "vehicle", "search", "listing", "srp")):
+            return
+        try:
+            data = await response.json()
+        except Exception:
+            return
+
+        # Normalise many possible response shapes → flat list of items
+        items: list = []
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            for key in ("vehicles", "inventory", "items", "results", "data",
+                        "Vehicles", "Inventory", "Items", "Results", "listings",
+                        "vehicleListViewModel"):
+                if isinstance(data.get(key), list):
+                    items = data[key]
+                    break
+            # One level deeper: {"data": {"vehicles": [...]}}
+            if not items and isinstance(data.get("data"), dict):
+                for key in ("vehicles", "inventory", "items", "results"):
+                    if isinstance(data["data"].get(key), list):
+                        items = data["data"][key]
+                        break
+
+        for item in items:
+            vin = (item.get("vin") or item.get("VIN") or item.get("Vin")
+                   or item.get("vehicleVin") or "")
+            raw_price = (item.get("price") or item.get("Price")
+                         or item.get("salePrice") or item.get("SalePrice")
+                         or item.get("listPrice") or item.get("ListPrice")
+                         or item.get("internetPrice") or item.get("InternetPrice")
+                         or item.get("askingPrice") or item.get("AskingPrice") or 0)
+            if vin and raw_price:
+                parsed = _parse_price_val(str(raw_price))
+                if parsed:
+                    api_hits.append({"vin": str(vin).upper(), "price": parsed})
+
+    page.on("response", on_response)
+
     try:
+        print(f"  [Search] Loading search page…", flush=True)
         await page.goto(
-            vehicle.link,
-            wait_until="domcontentloaded",  # don't wait for ad/chat/image resources
+            SEARCH_PAGE_URL,
+            wait_until="networkidle",
             timeout=PRICE_SCRAPE_TIMEOUT_MS,
         )
-        # Give AJAX pricing calls a moment to populate after DOM is ready
-        await page.wait_for_timeout(2000)
+        await page.wait_for_timeout(3000)
 
-        # 1 — JSON-LD structured data (most reliable)
-        result = await _price_from_json_ld(page)
-        if result:
-            return result
+        # Did API interception yield anything?
+        if api_hits:
+            for hit in api_hits:
+                vin_prices[hit["vin"]] = hit["price"]
+            print(f"  [Search] API interception → {len(vin_prices)} vehicles priced", flush=True)
+            return vin_prices
 
-        # 2 — JS globals set by the dealer platform
-        result = await _price_from_js(page)
-        if result:
-            return result
+        # ── Strategy 2: DOM scrape visible cards + paginate ───────────────────
+        print("  [Search] No API data captured — using DOM scraping", flush=True)
 
-        # 3 — CSS selectors
-        for selector in PRICE_SELECTORS:
+        _card_js = """
+        () => {
+            const results = [];
+            const seen = new Set();
+            // Try structured card containers first
+            const cards = document.querySelectorAll(
+                '[data-vin], [data-vehicle-vin], .vehicle-card, .inv-card, ' +
+                '.sr-vehicle-card, .vehicle-item, .search-result-item, ' +
+                '[class*="vehicle-card"], [class*="inv-card"]'
+            );
+            const priceSels = [
+                '[data-vehicle-pricing-final-price]', '.final-price',
+                '.vehicle-price', '.price-block .price', '.pricing .price',
+                '.asking-price', '.internet-price', 'span.price'
+            ];
+            for (const card of cards) {
+                let vin = (card.dataset.vin || card.dataset.vehicleVin || '').toUpperCase();
+                if (!vin) {
+                    const a = card.querySelector('a[href]');
+                    if (a) {
+                        const m = a.href.match(/([A-HJ-NPR-Z0-9]{17})(?:[\\/?#]|$)/i);
+                        if (m) vin = m[1].toUpperCase();
+                    }
+                }
+                if (!vin || seen.has(vin)) continue;
+                let priceText = '';
+                for (const sel of priceSels) {
+                    const el = card.querySelector(sel);
+                    if (el) { priceText = el.innerText; break; }
+                }
+                if (!priceText) {
+                    for (const el of card.querySelectorAll('[class*="price"]')) {
+                        if (/\\$[\\d,]+/.test(el.innerText)) {
+                            priceText = el.innerText; break;
+                        }
+                    }
+                }
+                if (priceText) { seen.add(vin); results.push({vin, priceText}); }
+            }
+            // Fallback: walk every VDP link, climb ancestors for price
+            if (results.length === 0) {
+                for (const a of document.querySelectorAll('a[href]')) {
+                    const m = a.href.match(/([A-HJ-NPR-Z0-9]{17})(?:[\\/?#]|$)/i);
+                    if (!m) continue;
+                    const vin = m[1].toUpperCase();
+                    if (seen.has(vin)) continue;
+                    let el = a.parentElement;
+                    for (let i = 0; i < 7; i++) {
+                        if (!el) break;
+                        const pe = el.querySelector('[class*="price"]');
+                        if (pe && /\\$[\\d,]+/.test(pe.innerText)) {
+                            seen.add(vin);
+                            results.push({vin, priceText: pe.innerText});
+                            break;
+                        }
+                        el = el.parentElement;
+                    }
+                }
+            }
+            return results;
+        }
+        """
+
+        page_num = 0
+        while True:
+            page_num += 1
+            card_data: list[dict] = await page.evaluate(_card_js)
+            found_this_page = 0
+            for item in card_data:
+                vin = item.get("vin", "")
+                parsed = _parse_price_val(item.get("priceText", ""))
+                if vin and parsed and vin not in vin_prices:
+                    vin_prices[vin] = parsed
+                    found_this_page += 1
+            print(f"  [Search] Page {page_num}: {found_this_page} new prices found (total {len(vin_prices)})", flush=True)
+
+            # Try to advance to next page
+            next_btn = await page.query_selector(
+                "a[aria-label='Next page'], a[aria-label='next'], "
+                "a.next-page, a[rel='next'], "
+                ".pagination a:last-child, [class*='next-page']:not([disabled]), "
+                "button[aria-label*='next' i]:not([disabled])"
+            )
+            if not next_btn or found_this_page == 0:
+                break
             try:
-                el = await page.query_selector(selector)
-                if el:
-                    raw_text = await el.inner_text()
-                    result = _parse_price_val(raw_text)
-                    if result:
-                        return result
+                await next_btn.click()
+                await page.wait_for_load_state("networkidle", timeout=30000)
+                await page.wait_for_timeout(2000)
             except Exception:
-                continue
+                break
 
-        # 4 — Last resort: scan full page text near the word "price"
-        body = await page.inner_text("body")
-        for price_section in re.finditer(r"(?i)price.{0,200}", body):
-            result = _parse_price_val(price_section.group())
-            if result:
-                return result
+        return vin_prices
 
     except Exception as exc:
-        print(f"    [WARN] {vehicle.vin}: {exc}", flush=True)
-
-    return None
+        print(f"  [Search] ERROR: {exc}", flush=True)
+        return vin_prices
+    finally:
+        await page.close()
 
 
 async def scrape_prices(
@@ -373,26 +513,6 @@ async def scrape_prices(
     if not need_scrape:
         return vehicles
 
-    sem = asyncio.Semaphore(PRICE_SCRAPE_CONCURRENCY)
-    debug_saved = False
-
-    async def run_one(ctx, v: Vehicle):
-        nonlocal debug_saved
-        async with sem:
-            page = await ctx.new_page()
-            try:
-                v.price = await _scrape_one(page, v)
-                status = v.price if v.price else "not found"
-                print(f"    {v.vin[:10]}  {v.title[:42]:42s}  {status}", flush=True)
-                if debug and not v.price and not debug_saved:
-                    html = await page.content()
-                    with open("debug_vdp.html", "w", encoding="utf-8") as fh:
-                        fh.write(html)
-                    print(f"    [DEBUG] Saved page HTML → debug_vdp.html ({v.link})", flush=True)
-                    debug_saved = True
-            finally:
-                await page.close()
-
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         ctx = await browser.new_context(
@@ -403,13 +523,36 @@ async def scrape_prices(
             ),
             viewport={"width": 1280, "height": 800},
         )
+
+        # Single bulk load of the search page — much faster than one VDP per vehicle
         print(
-            f"\n[Playwright] Scraping {len(need_scrape)} VDPs without RSS price "
-            f"(concurrency={PRICE_SCRAPE_CONCURRENCY})...",
+            f"\n[Playwright] Fetching prices from search page for "
+            f"{len(need_scrape)} vehicles…",
             flush=True,
         )
-        await asyncio.gather(*[run_one(ctx, v) for v in need_scrape])
+        vin_price_map = await _bulk_prices_from_search_page(ctx)
+
+        if debug and not vin_price_map:
+            # Save the search page HTML so we can inspect what was actually loaded
+            page = await ctx.new_page()
+            try:
+                await page.goto(SEARCH_PAGE_URL, wait_until="networkidle",
+                                timeout=PRICE_SCRAPE_TIMEOUT_MS)
+                with open("debug_search.html", "w", encoding="utf-8") as fh:
+                    fh.write(await page.content())
+                print("  [DEBUG] Saved search page HTML → debug_search.html", flush=True)
+            finally:
+                await page.close()
+
         await browser.close()
+
+    # Match prices back to vehicles by VIN
+    for v in need_scrape:
+        price = vin_price_map.get(v.vin)
+        if price:
+            v.price = price
+        status = v.price if v.price else "not found"
+        print(f"    {v.vin[:10]}  {v.title[:42]:42s}  {status}", flush=True)
 
     found = sum(1 for v in vehicles if v.price)
     print(f"\n[Playwright] Prices found: {found}/{len(vehicles)}", flush=True)
