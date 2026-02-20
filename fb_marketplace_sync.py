@@ -403,14 +403,13 @@ def _fb_item(v: Vehicle) -> dict:
             price_cents = int(m.group(1)) * 100
 
     item = {
-        "id":             v.vin,
-        "title":          v.title,
+        # FB Vehicles catalog field names (url/image_url, not link/image_link)
+        "url":            v.link,
+        "image_url":      v.image_url,
         "description":    v.description,
-        "availability":   "in stock",
+        "availability":   "available",
         "condition":      v.condition,
         "price":          price_cents,
-        "link":           v.link,
-        "image_link":     v.image_url,
         "brand":          v.make,
         # Automotive-specific fields
         "make":           v.make,
@@ -432,10 +431,10 @@ def _fb_item(v: Vehicle) -> dict:
 # Step 4a — Save CSV backup
 # ──────────────────────────────────────────────────────────────────────────────
 CSV_FIELDS = [
-    "id", "title", "description", "availability", "condition",
-    "price", "link", "image_link", "brand",
+    "vin", "description", "availability", "condition",
+    "price", "url", "image_url", "brand",
     "year", "make", "model", "trim",
-    "mileage", "exterior_color", "vin",
+    "mileage", "exterior_color",
     "vehicle_type", "state_of_vehicle",
 ]
 
