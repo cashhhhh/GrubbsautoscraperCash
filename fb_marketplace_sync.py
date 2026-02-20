@@ -204,7 +204,10 @@ def _parse_price_val(text: str) -> Optional[str]:
     m = re.search(r"\$?\s*([\d]{1,3}(?:,[\d]{3})+|[\d]{4,6})", text)
     if m:
         val = int(m.group(1).replace(",", ""))
-        if 500 < val < 500_000:
+        # Exclude model-year values (1900-2035) which appear everywhere on VDP pages
+        if 1900 <= val <= 2035:
+            return None
+        if 2_500 < val < 500_000:
             return f"{val} USD"
     return None
 
@@ -266,9 +269,11 @@ async def _scrape_one(page, vehicle: Vehicle) -> Optional[str]:
     try:
         await page.goto(
             vehicle.link,
-            wait_until="networkidle",
+            wait_until="load",
             timeout=PRICE_SCRAPE_TIMEOUT_MS,
         )
+        # Give AJAX pricing calls time to return after the page fires "load"
+        await page.wait_for_timeout(3000)
 
         # 1 — JSON-LD structured data (most reliable)
         result = await _price_from_json_ld(page)
