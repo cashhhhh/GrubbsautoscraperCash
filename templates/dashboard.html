@@ -452,6 +452,12 @@
                           Download
                         </button>
                       </div>
+                      <button
+                        class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                        :disabled="!v.price_ok"
+                        @click="downloadMockPencil(v)">
+                        Download
+                      </button>
                     </td>
                   </tr>
                 </template>
@@ -1098,19 +1104,9 @@ function dashboard() {
     userMsg: '',
     userMsgOk: true,
     pwdInputs: {},
-    pencilDeskOpen: false,
-    pencilVehicle: null,
-    mockPencil: {
-      addendumLabel: 'Addendum',
-      addendumAmount: 4400,
-      taxLabel: 'State Tax',
-      taxRate: 6.25,
-      docFeeLabel: 'Doc Fee',
-      docFeeAmount: 225,
-      apr: 8.99,
-      termMonths: 72,
-      downPayment: 0,
-    },
+    mockPencilAddendum: 4400,
+    mockPencilTaxRate: 0.0625,
+    mockPencilDocFee: 225,
 
     get bodyStyles() {
       const set = new Set(this.vehicles.map(v => v.body_style).filter(Boolean))
@@ -1374,49 +1370,17 @@ function dashboard() {
       return Number(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
     },
 
-    openPencilDesk(v) {
-      if (!v?.price_ok || !v?.effective_price) {
-        alert('This unit needs an internet price before desking.')
-        return
-      }
-      this.pencilVehicle = v
-
-      const vehicleAddendum = v.effective_addendum
-      const globalAddendum = this.settings?.addendum_amount
-      const fallbackAddendum = this.mockPencil.addendumAmount
-      this.mockPencil.addendumAmount = Number(
-        vehicleAddendum ?? globalAddendum ?? fallbackAddendum ?? 4400
-      )
-
-      this.pencilDeskOpen = true
-    },
-
-    pencilTotals(v = this.pencilVehicle) {
-      const basePrice = Number(v?.effective_price || 0)
-      const addendumAmount = Number(this.mockPencil.addendumAmount || 0)
-      const taxRate = Number(this.mockPencil.taxRate || 0) / 100
-      const taxAmount = Number(((basePrice + addendumAmount) * taxRate).toFixed(2))
-      const docFeeAmount = Number(this.mockPencil.docFeeAmount || 0)
-      const outTheDoor = Number((basePrice + addendumAmount + taxAmount + docFeeAmount).toFixed(2))
-      const downPayment = Number(this.mockPencil.downPayment || 0)
-      const amountFinanced = Math.max(0, Number((outTheDoor - downPayment).toFixed(2)))
-      const apr = Number(this.mockPencil.apr || 0)
-      const term = Math.max(1, parseInt(this.mockPencil.termMonths || 1, 10))
-      const monthlyRate = apr / 1200
-      const monthlyPayment = monthlyRate > 0
-        ? Number((amountFinanced * monthlyRate / (1 - Math.pow(1 + monthlyRate, -term))).toFixed(2))
-        : Number((amountFinanced / term).toFixed(2))
-
-      return { basePrice, addendumAmount, taxAmount, docFeeAmount, outTheDoor, amountFinanced, monthlyPayment }
-    },
-
     downloadMockPencil(v) {
       if (!v?.price_ok || !v?.effective_price) {
         alert('This unit needs an internet price before generating a pencil.')
         return
       }
 
-      const totals = this.pencilTotals(v)
+      const basePrice = Number(v.effective_price)
+      const addendum = this.mockPencilAddendum
+      const taxAmount = Number(((basePrice + addendum) * this.mockPencilTaxRate).toFixed(2))
+      const docFee = this.mockPencilDocFee
+      const outTheDoor = Number((basePrice + addendum + taxAmount + docFee).toFixed(2))
       const vehicleLabel = `${v.year || ''} ${v.make || ''} ${v.model || ''}`.trim()
       const trimLabel = v.trim ? ` ${v.trim}` : ''
       const stock = v.stock_number || 'N/A'
@@ -1439,7 +1403,6 @@ function dashboard() {
       th { text-align: left; color: #475569; font-weight: 600; }
       td:last-child, th:last-child { text-align: right; }
       .otd td { font-size: 18px; font-weight: 700; color: #0f172a; border-top: 2px solid #94a3b8; }
-      .payment td { font-size: 16px; font-weight: 700; color: #1d4ed8; }
       .foot { padding: 0 22px 20px; font-size: 12px; color: #64748b; line-height: 1.45; }
     </style>
   </head>
@@ -1455,13 +1418,11 @@ function dashboard() {
         <div><strong>Date:</strong> ${new Date().toLocaleString()}</div>
       </div>
       <table>
-        <tr><th>Internet Price</th><td>${this.fmtMoney(totals.basePrice)}</td></tr>
-        <tr><th>${this.mockPencil.addendumLabel}</th><td>${this.fmtMoney(totals.addendumAmount)}</td></tr>
-        <tr><th>${this.mockPencil.taxLabel} (${Number(this.mockPencil.taxRate || 0).toFixed(2)}%)</th><td>${this.fmtMoney(totals.taxAmount)}</td></tr>
-        <tr><th>${this.mockPencil.docFeeLabel}</th><td>${this.fmtMoney(totals.docFeeAmount)}</td></tr>
-        <tr class="otd"><td>Estimated Out-the-Door</td><td>${this.fmtMoney(totals.outTheDoor)}</td></tr>
-        <tr><th>Down Payment</th><td>${this.fmtMoney(this.mockPencil.downPayment)}</td></tr>
-        <tr class="payment"><td>Estimated Monthly Payment (${Number(this.mockPencil.apr || 0).toFixed(2)}% / ${this.mockPencil.termMonths} mo)</td><td>${this.fmtMoney(totals.monthlyPayment)}</td></tr>
+        <tr><th>Internet Price</th><td>${this.fmtMoney(basePrice)}</td></tr>
+        <tr><th>Addendum</th><td>${this.fmtMoney(addendum)}</td></tr>
+        <tr><th>State Tax (6.25%)</th><td>${this.fmtMoney(taxAmount)}</td></tr>
+        <tr><th>Doc Fee</th><td>${this.fmtMoney(docFee)}</td></tr>
+        <tr class="otd"><td>Estimated Out-the-Door</td><td>${this.fmtMoney(outTheDoor)}</td></tr>
       </table>
       <div class="foot">
         This mock pencil is an estimate and is subject to lender approval, final tax/title calculations,
