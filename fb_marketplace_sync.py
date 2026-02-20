@@ -28,10 +28,29 @@ import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass, field
 from typing import Optional
 
+import subprocess
+
 import requests
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 from playwright.async_api import TimeoutError as PWTimeout
+
+
+def _ensure_chromium() -> None:
+    """Install the Chromium browser binary if it isn't already present.
+
+    Render's build step only runs ``pip install``, so the browser is installed
+    here on first run instead.  Subsequent runs are a no-op because Playwright
+    skips re-downloading an already-present binary.
+    """
+    subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        check=False,        # don't crash if already installed
+        capture_output=True,
+    )
+
+
+_ensure_chromium()
 
 load_dotenv()
 
