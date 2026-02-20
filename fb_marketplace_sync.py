@@ -397,7 +397,7 @@ def _fb_item(v: Vehicle) -> dict:
     """Return the data dict for one vehicle in the FB catalog format."""
     price_str = v.price if v.price else "0 USD"
 
-    return {
+    item = {
         "id":             v.vin,
         "title":          v.title,
         "description":    v.description,
@@ -408,7 +408,6 @@ def _fb_item(v: Vehicle) -> dict:
         "image_link":     v.image_url,
         "brand":          v.make,
         # Automotive-specific fields
-        "year":           int(v.year) if v.year and v.year.isdigit() else None,
         "make":           v.make,
         "model":          v.model,
         "trim":           v.trim,
@@ -418,6 +417,10 @@ def _fb_item(v: Vehicle) -> dict:
         "vehicle_type":   "car_truck",
         "state_of_vehicle": v.condition,
     }
+    if v.year and v.year.isdigit():
+        item["year"] = int(v.year)
+    # Drop any keys with None or empty-string values to avoid API validation errors
+    return {k: val for k, val in item.items() if val is not None and val != ""}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -570,6 +573,10 @@ def upload_to_facebook(vehicles: list[Vehicle]) -> bool:
                 f"{len(handles)} handle(s) returned",
                 flush=True,
             )
+            if not handles:
+                print(f"  [FB] WARNING — 0 handles: Facebook accepted the request but queued nothing.", flush=True)
+                print(f"  [FB] Full response: {json.dumps(result)}", flush=True)
+                all_ok = False
 
         time.sleep(0.5)   # respect rate limits
 
