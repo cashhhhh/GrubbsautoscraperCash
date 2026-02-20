@@ -24,7 +24,7 @@ import re
 import sys
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Optional
 
 import requests
@@ -59,6 +59,9 @@ BATCH_SIZE               = int(os.getenv("BATCH_SIZE",               "50"))
 PRICE_SCRAPE_CONCURRENCY = int(os.getenv("PRICE_SCRAPE_CONCURRENCY", "5"))
 PRICE_SCRAPE_TIMEOUT_MS  = int(os.getenv("PRICE_SCRAPE_TIMEOUT_MS",  "30000"))
 CSV_OUTPUT_PATH          = os.getenv("CSV_OUTPUT_PATH", "inventory_feed.csv")
+# Only process RSS URLs whose domain contains this string.
+# Guards against accidentally pulling partner / other-store feeds.
+SA_DOMAIN_FILTER         = os.getenv("SA_DOMAIN_FILTER", "infinitiofsanantonio.com")
 
 # DealerOn price selectors — tried in order, first match wins
 PRICE_SELECTORS = [
@@ -216,6 +219,9 @@ def fetch_rss() -> list[Vehicle]:
     all_vehicles: list[Vehicle] = []
     for url in RSS_URLS:
         label = url.split("/")[-1]   # e.g. rss-usedinventory.aspx
+        if SA_DOMAIN_FILTER and SA_DOMAIN_FILTER.lower() not in url.lower():
+            print(f"[RSS] SKIP {url} — not San Antonio store (SA_DOMAIN_FILTER={SA_DOMAIN_FILTER})", flush=True)
+            continue
         try:
             condition = "new" if "newinventory" in url else "used"
             batch = _parse_rss_feed(url, condition=condition)
@@ -767,6 +773,9 @@ def main() -> None:
     print("  Grubbs INFINITI of San Antonio")
     print("=" * 60)
 
+    t_start = time.time()
+    success = True
+
     # 1 — Fetch RSS
     print("\n[1/4] Fetching inventory from DealerOn RSS feed…")
     vehicles = fetch_rss()
@@ -793,11 +802,32 @@ def main() -> None:
     else:
         print("\n[4/4] Uploading to Facebook Catalog…")
         ok = upload_to_facebook(vehicles)
+        success = ok
         if ok:
             print("\nAll done — inventory is live in your Facebook catalog!")
         else:
             print("\nDone with some errors — check output above.")
-            sys.exit(1)
+
+    # 5 — Persist to dashboard DB
+    try:
+        import db as _db
+        _db.init_db()
+        vehicle_dicts = [asdict(v) for v in vehicles]
+        _db.upsert_vehicles(vehicle_dicts)
+        priced_count = sum(1 for v in vehicles if v.price)
+        _db.record_sync_run({
+            "vehicles_found":    len(vehicles),
+            "vehicles_priced":   priced_count,
+            "vehicles_uploaded": len(vehicles) if (not args.csv_only and success) else 0,
+            "duration_seconds":  time.time() - t_start,
+            "success":           success,
+        })
+        print(f"\n[DB] Saved {len(vehicles)} vehicles to dashboard database.", flush=True)
+    except Exception as exc:
+        print(f"\n[DB] WARNING — could not write to dashboard DB: {exc}", flush=True)
+
+    if not success:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
