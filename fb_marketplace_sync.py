@@ -17,6 +17,7 @@ Setup:
 import argparse
 import asyncio
 import csv
+import io
 import json
 import os
 import re
@@ -391,62 +392,53 @@ async def scrape_prices(vehicles: list[Vehicle], debug: bool = False) -> list[Ve
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 3 — Build Facebook catalog items
+# Step 3 — Build Facebook automotive feed rows
 # ──────────────────────────────────────────────────────────────────────────────
-def _fb_item(v: Vehicle) -> dict:
-    """Return the data dict for one vehicle in the FB catalog format."""
-    # Vehicles catalog requires price as an integer in cents (e.g. $24,995 → 2499500)
-    price_cents = 0
-    if v.price:
-        m = re.match(r"(\d+)", v.price)
-        if m:
-            price_cents = int(m.group(1)) * 100
+# Field names match Facebook's documented automotive inventory CSV feed format.
+FEED_FIELDS = [
+    "id", "title", "description", "availability", "condition",
+    "price", "link", "image_link",
+    "year", "make", "model", "trim",
+    "mileage.value", "mileage.unit",
+    "exterior_color", "vin",
+    "vehicle_type", "state_of_vehicle",
+]
 
-    item = {
-        # FB Vehicles catalog field names (url/image_url, not link/image_link)
-        "url":            v.link,
-        "image_url":      v.image_url,
+def _feed_row(v: Vehicle) -> dict:
+    """Return a row dict in Facebook automotive CSV feed format."""
+    price_str = v.price if v.price else "0 USD"
+    return {
+        "id":             v.vin,
+        "title":          v.title,
         "description":    v.description,
-        "availability":   "in stock",
+        "availability":   "available",
         "condition":      v.condition,
-        "price":          price_cents,
-        "brand":          v.make,
-        # Automotive-specific fields
+        "price":          price_str,
+        "link":           v.link,
+        "image_link":     v.image_url,
+        "year":           v.year,
         "make":           v.make,
         "model":          v.model,
         "trim":           v.trim,
-        "mileage":        {"value": int(v.mileage) if v.mileage.isdigit() else 0, "unit": "MI"},
+        "mileage.value":  v.mileage,
+        "mileage.unit":   "MI",
         "exterior_color": v.exterior_color,
         "vin":            v.vin,
         "vehicle_type":   "car_truck",
         "state_of_vehicle": v.condition,
     }
-    if v.year and v.year.isdigit():
-        item["year"] = int(v.year)
-    # Drop any keys with None or empty-string values to avoid API validation errors
-    return {k: val for k, val in item.items() if val is not None and val != ""}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 4a — Save CSV backup
 # ──────────────────────────────────────────────────────────────────────────────
-CSV_FIELDS = [
-    "vin", "description", "availability", "condition",
-    "price", "url", "image_url", "brand",
-    "year", "make", "model", "trim",
-    "mileage", "exterior_color",
-    "vehicle_type", "state_of_vehicle",
-]
-
 def save_csv(vehicles: list[Vehicle], path: str = CSV_OUTPUT_PATH) -> None:
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=CSV_FIELDS)
+        writer = csv.DictWriter(fh, fieldnames=FEED_FIELDS)
         writer.writeheader()
         for v in vehicles:
-            item = _fb_item(v)
-            item["mileage"] = item["mileage"]["value"]     # flatten for CSV
-            row = {k: (item.get(k) or "") for k in CSV_FIELDS}
-            writer.writerow(row)
+            row = _feed_row(v)
+            writer.writerow({k: (row.get(k) or "") for k in FEED_FIELDS})
     print(f"[CSV] Saved {len(vehicles)} vehicles → {path}", flush=True)
 
 
@@ -542,14 +534,40 @@ def check_catalog_type(catalog_id: str) -> None:
         print(f"  [FB] catalog type check failed: {exc}", flush=True)
 
 
+def _get_or_create_feed(catalog_id: str) -> str:
+    """Return the ID of the first product feed for this catalog, creating one if needed."""
+    base = f"https://graph.facebook.com/{FB_API_VERSION}"
+    r = requests.get(
+        f"{base}/{catalog_id}/product_feeds",
+        params={"access_token": FB_ACCESS_TOKEN, "fields": "id,name"},
+        timeout=15,
+    )
+    data = r.json()
+    if "error" in data:
+        raise RuntimeError(data["error"].get("message"))
+    feeds = data.get("data", [])
+    if feeds:
+        feed = feeds[0]
+        print(f"  [FB] Using existing feed: '{feed['name']}' (id={feed['id']})", flush=True)
+        return feed["id"]
+    # Create a new feed
+    r = requests.post(
+        f"{base}/{catalog_id}/product_feeds",
+        data={"name": "Grubbs INFINITI Inventory", "access_token": FB_ACCESS_TOKEN},
+        timeout=15,
+    )
+    result = r.json()
+    if "error" in result:
+        raise RuntimeError(result["error"].get("message"))
+    feed_id = result["id"]
+    print(f"  [FB] Created new feed (id={feed_id})", flush=True)
+    return feed_id
+
+
 def upload_to_facebook(vehicles: list[Vehicle]) -> bool:
     """
-    POST vehicles to the Facebook Product Catalog batch endpoint.
-    Returns True on full success, False if any batch had errors.
-
-    Facebook docs:
-      POST /{catalog_id}/batch
-      https://developers.facebook.com/docs/marketing-api/catalog/reference/
+    Upload vehicles to the Facebook Product Catalog via CSV feed upload.
+    Uses the product_feeds / uploads API which accepts full automotive field names.
     """
     if not FB_ACCESS_TOKEN:
         print(
@@ -565,54 +583,44 @@ def upload_to_facebook(vehicles: list[Vehicle]) -> bool:
             "\n[FB] Could not determine catalog ID — skipping upload.\n"
             "     Set FB_CATALOG_ID in .env and re-run.",
             flush=True,
-
         )
         return False
 
     check_catalog_type(catalog_id)
-    endpoint = f"https://graph.facebook.com/{FB_API_VERSION}/{catalog_id}/batch"
-    all_ok = True
 
-    for batch_num, i in enumerate(range(0, len(vehicles), BATCH_SIZE), start=1):
-        chunk = vehicles[i : i + BATCH_SIZE]
+    try:
+        feed_id = _get_or_create_feed(catalog_id)
+    except Exception as exc:
+        print(f"  [FB] Could not get/create feed: {exc}", flush=True)
+        return False
 
-        requests_payload = [
-            {
-                "method":      "UPDATE",   # creates or updates
-                "retailer_id": v.vin,
-                "data":        _fb_item(v),
-            }
-            for v in chunk
-        ]
+    # Build CSV in memory using the automotive feed field names
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=FEED_FIELDS)
+    writer.writeheader()
+    for v in vehicles:
+        row = _feed_row(v)
+        writer.writerow({k: (row.get(k) or "") for k in FEED_FIELDS})
+    csv_bytes = buf.getvalue().encode("utf-8")
 
-        resp = requests.post(
-            endpoint,
-            data={
-                "requests":     json.dumps(requests_payload),
-                "access_token": FB_ACCESS_TOKEN,
-            },
-            timeout=60,
-        )
-        result = resp.json()
+    # Upload the CSV to the feed
+    endpoint = f"https://graph.facebook.com/{FB_API_VERSION}/{feed_id}/uploads"
+    resp = requests.post(
+        endpoint,
+        files={"file": ("inventory.csv", csv_bytes, "text/csv")},
+        data={"access_token": FB_ACCESS_TOKEN},
+        timeout=120,
+    )
+    result = resp.json()
 
-        if "error" in result:
-            print(f"  [FB] Batch {batch_num} ERROR: {result['error']}", flush=True)
-            all_ok = False
-        else:
-            handles = result.get("handles", [])
-            print(
-                f"  [FB] Batch {batch_num}: {len(chunk)} items submitted, "
-                f"{len(handles)} handle(s) returned",
-                flush=True,
-            )
-            if not handles:
-                print(f"  [FB] WARNING — 0 handles: Facebook accepted the request but queued nothing.", flush=True)
-                print(f"  [FB] Full response: {json.dumps(result)}", flush=True)
-                all_ok = False
+    if "error" in result:
+        print(f"  [FB] Upload ERROR: {result['error']}", flush=True)
+        return False
 
-        time.sleep(0.5)   # respect rate limits
-
-    return all_ok
+    upload_id = result.get("id", "unknown")
+    print(f"  [FB] Feed upload accepted — upload_id={upload_id}", flush=True)
+    print(f"  [FB] Items will appear in Commerce Manager within a few minutes.", flush=True)
+    return True
 
 
 # ──────────────────────────────────────────────────────────────────────────────
