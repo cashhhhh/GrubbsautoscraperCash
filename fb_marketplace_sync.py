@@ -125,6 +125,10 @@ def _parse_rss_feed(url: str, condition: str = "used") -> list[Vehicle]:
         link             = txt("link")
         description_html = txt("description")
 
+        # ── SA store filter — skip vehicles whose detail page is on another store ──
+        if SA_DOMAIN_FILTER and SA_DOMAIN_FILTER.lower() not in link.lower():
+            continue
+
         # ── VIN ─────────────────────────────────────────────────────────────
         vin = ""
         m = re.search(r"VIN#[:\s]+([A-HJ-NPR-Z0-9]{17})", description_html, re.I)
