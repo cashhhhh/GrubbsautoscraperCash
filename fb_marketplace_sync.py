@@ -16,6 +16,7 @@ Setup:
 
 import argparse
 import asyncio
+import base64
 import csv
 import io
 import json
@@ -42,7 +43,8 @@ load_dotenv()
 # Add rss-newinventory.aspx here if you ever want brand-new cars too.
 _rss_urls_env = os.getenv(
     "RSS_URLS",
-    "https://www.infinitiofsanantonio.com/rss-usedinventory.aspx",
+    "https://www.infinitiofsanantonio.com/rss-usedinventory.aspx"
+    "?Dealership=Grubbs+INFINITI+of+San+Antonio",
 )
 RSS_URLS = [u.strip() for u in _rss_urls_env.split(",") if u.strip()]
 DEALER_BASE_URL          = os.getenv("DEALER_BASE_URL", "https://www.infinitiofsanantonio.com")
@@ -324,8 +326,13 @@ def _fetch_prices_from_api() -> dict[str, str]:
     """
     Hit the DealerOn inventory JSON API directly — no browser required.
     Returns {VIN: 'NNNNN USD'} for every vehicle found across all pages.
-    Price is embedded as HTML in PriceStakViewModel.BuyContent:
-        <span class="vehiclePricingHighlightAmount">$15,995</span>
+
+    Response shape:
+      DisplayCards[]
+        .IsAdCard  (bool) — skip these
+        .VehicleCard
+          .VehicleVin          — 17-char VIN
+          .VehiclePriceLibrary — base64: "Selling Price:15995.0;..."
     """
     vin_prices: dict[str, str] = {}
     base_url = DEALERON_API_URL.format(
@@ -333,11 +340,12 @@ def _fetch_prices_from_api() -> dict[str, str]:
         page_id=DEALERON_PAGE_ID,
     )
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    page_num = 1
+    page_num   = 1
+    total_pages = 1
 
-    while True:
+    while page_num <= total_pages:
         url = base_url if page_num == 1 else f"{base_url}&pn={page_num}"
-        print(f"  [API] Fetching inventory page {page_num}: {url}", flush=True)
+        print(f"  [API] Fetching inventory page {page_num}/{total_pages}: {url}", flush=True)
         try:
             resp = requests.get(url, headers=headers, timeout=30)
             resp.raise_for_status()
@@ -346,45 +354,58 @@ def _fetch_prices_from_api() -> dict[str, str]:
             print(f"  [API] ERROR on page {page_num}: {exc}", flush=True)
             break
 
-        vehicles = data.get("Vehicles") or data.get("vehicles") or []
-        total    = data.get("TotalCount") or data.get("totalCount") or 0
+        # Update total page count from pagination metadata
+        paging = (data.get("Paging") or {}).get("PaginationDataModel") or {}
+        total_pages = paging.get("TotalPages") or 1
+        total_count = paging.get("TotalCount") or 0
 
-        if not vehicles:
-            break
+        cards = data.get("DisplayCards") or []
+        found_this_page = 0
 
-        for v in vehicles:
-            vin = (v.get("Vin") or v.get("VIN") or v.get("vin") or
-                   v.get("VehicleVin") or "").strip().upper()
-            if not vin:
+        for card in cards:
+            if card.get("IsAdCard"):
+                continue
+            v = card.get("VehicleCard") or {}
+            vin = (v.get("VehicleVin") or "").strip().upper()
+            if not vin or vin in vin_prices:
                 continue
 
-            # Primary: price lives inside PriceStakViewModel.BuyContent HTML
-            price_html = ""
-            ps = v.get("PriceStakViewModel")
-            if isinstance(ps, dict):
-                price_html = ps.get("BuyContent") or ps.get("buycontent") or ""
+            # Primary: VehiclePriceLibrary is base64 "Selling Price:15995.0;..."
+            price_lib = v.get("VehiclePriceLibrary") or ""
+            if price_lib:
+                try:
+                    decoded = base64.b64decode(price_lib).decode("utf-8")
+                    m = re.search(r"Selling Price:([\d.]+)", decoded)
+                    if m:
+                        val = float(m.group(1))
+                        if 2_500 < val < 500_000:
+                            vin_prices[vin] = f"{int(val)} USD"
+                            found_this_page += 1
+                            continue
+                except Exception:
+                    pass
 
-            if price_html:
-                m = re.search(r"vehiclePricingHighlightAmount[^>]*>\$?([\d,]+)", price_html)
-                if m:
-                    val = int(m.group(1).replace(",", ""))
-                    if 2_500 < val < 500_000:
-                        vin_prices[vin] = f"{val} USD"
-                        continue
+            # Fallback: parse vehiclePricingHighlightAmount in nested HTML
+            try:
+                buy_html = (
+                    v.get("WasabiVehiclePricingPanelViewModel", {})
+                     .get("PriceStakViewModel", {})
+                     .get("PriceStakTabsModel", {})
+                     .get("BuyContent", "")
+                ) or ""
+                if buy_html:
+                    m = re.search(r"vehiclePricingHighlightAmount[^>]*>\$?([\d,]+)", buy_html)
+                    if m:
+                        val = int(m.group(1).replace(",", ""))
+                        if 2_500 < val < 500_000:
+                            vin_prices[vin] = f"{val} USD"
+                            found_this_page += 1
+                            continue
+            except Exception:
+                pass
 
-            # Fallback: plain numeric price fields
-            raw = (v.get("Price") or v.get("price") or v.get("SalePrice") or
-                   v.get("ListPrice") or v.get("InternetPrice") or "")
-            if raw:
-                parsed = _parse_price_val(str(raw))
-                if parsed:
-                    vin_prices[vin] = parsed
-
-        print(f"  [API] Page {page_num}: {len(vehicles)} vehicles, "
-              f"{len(vin_prices)} priced so far (total={total})", flush=True)
-
-        if len(vin_prices) >= total or len(vehicles) < 10:
-            break
+        print(f"  [API] Page {page_num}: {found_this_page} new prices "
+              f"(running total {len(vin_prices)}/{total_count})", flush=True)
         page_num += 1
 
     return vin_prices
