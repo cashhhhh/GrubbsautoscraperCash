@@ -333,11 +333,12 @@
                   <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Saves</th>
                   <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                   <th class="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Links</th>
+                  <th class="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Mock Pencil</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-50">
                 <template x-if="vehicles.length === 0">
-                  <tr><td colspan="13" class="py-12 text-center text-slate-400 text-sm">No vehicles match your filters.</td></tr>
+                  <tr><td colspan="14" class="py-12 text-center text-slate-400 text-sm">No vehicles match your filters.</td></tr>
                 </template>
                 <template x-for="v in vehicles" :key="v.vin">
                   <tr class="hover:bg-blue-50/40 transition-colors cursor-default group"
@@ -434,6 +435,15 @@
                         <a x-show="v.link" :href="v.link" target="_blank" rel="noopener"
                           class="text-xs text-fb hover:underline font-medium">VDP ↗</a>
                       </div>
+                    </td>
+                    <!-- Mock Pencil -->
+                    <td class="px-3 py-2.5 text-center" @click.stop>
+                      <button
+                        class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                        :disabled="!v.price_ok"
+                        @click="downloadMockPencil(v)">
+                        Download
+                      </button>
                     </td>
                   </tr>
                 </template>
@@ -993,6 +1003,9 @@ function dashboard() {
     userMsg: '',
     userMsgOk: true,
     pwdInputs: {},
+    mockPencilAddendum: 4400,
+    mockPencilTaxRate: 0.0625,
+    mockPencilDocFee: 225,
 
     get bodyStyles() {
       const set = new Set(this.vehicles.map(v => v.body_style).filter(Boolean))
@@ -1250,6 +1263,81 @@ function dashboard() {
     fmt(n) {
       if (n == null || n === '') return '—'
       return Number(n).toLocaleString('en-US')
+    },
+
+    fmtMoney(n) {
+      return Number(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+    },
+
+    downloadMockPencil(v) {
+      if (!v?.price_ok || !v?.effective_price) {
+        alert('This unit needs an internet price before generating a pencil.')
+        return
+      }
+
+      const basePrice = Number(v.effective_price)
+      const addendum = this.mockPencilAddendum
+      const taxAmount = Number(((basePrice + addendum) * this.mockPencilTaxRate).toFixed(2))
+      const docFee = this.mockPencilDocFee
+      const outTheDoor = Number((basePrice + addendum + taxAmount + docFee).toFixed(2))
+      const vehicleLabel = `${v.year || ''} ${v.make || ''} ${v.model || ''}`.trim()
+      const trimLabel = v.trim ? ` ${v.trim}` : ''
+      const stock = v.stock_number || 'N/A'
+      const vin = v.vin || 'N/A'
+
+      const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Mock Pencil - ${vehicleLabel}</title>
+    <style>
+      body { font-family: Inter, Arial, sans-serif; margin: 28px; color: #0f172a; }
+      .card { max-width: 760px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+      .head { background: #0f172a; color: #fff; padding: 22px; }
+      .head h1 { margin: 0; font-size: 22px; }
+      .head p { margin: 6px 0 0; color: #cbd5e1; font-size: 13px; }
+      .meta { padding: 18px 22px 8px; font-size: 13px; color: #334155; }
+      table { width: calc(100% - 44px); margin: 10px 22px 20px; border-collapse: collapse; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+      th { text-align: left; color: #475569; font-weight: 600; }
+      td:last-child, th:last-child { text-align: right; }
+      .otd td { font-size: 18px; font-weight: 700; color: #0f172a; border-top: 2px solid #94a3b8; }
+      .foot { padding: 0 22px 20px; font-size: 12px; color: #64748b; line-height: 1.45; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="head">
+        <h1>Grubbs INFINITI — Mock Pencil</h1>
+        <p>Prepared for customer review</p>
+      </div>
+      <div class="meta">
+        <div><strong>Vehicle:</strong> ${vehicleLabel}${trimLabel}</div>
+        <div><strong>Stock:</strong> ${stock} &nbsp;&nbsp; <strong>VIN:</strong> ${vin}</div>
+        <div><strong>Date:</strong> ${new Date().toLocaleString()}</div>
+      </div>
+      <table>
+        <tr><th>Internet Price</th><td>${this.fmtMoney(basePrice)}</td></tr>
+        <tr><th>Addendum</th><td>${this.fmtMoney(addendum)}</td></tr>
+        <tr><th>State Tax (6.25%)</th><td>${this.fmtMoney(taxAmount)}</td></tr>
+        <tr><th>Doc Fee</th><td>${this.fmtMoney(docFee)}</td></tr>
+        <tr class="otd"><td>Estimated Out-the-Door</td><td>${this.fmtMoney(outTheDoor)}</td></tr>
+      </table>
+      <div class="foot">
+        This mock pencil is an estimate and is subject to lender approval, final tax/title calculations,
+        and availability at time of delivery.
+      </div>
+    </div>
+  </body>
+</html>`
+
+      const blob = new Blob([html], { type: 'text/html' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `mock-pencil-${(stock !== 'N/A' ? stock : vin).replace(/[^a-z0-9-]/gi, '_')}.html`
+      a.click()
+      URL.revokeObjectURL(url)
     },
 
     fmtBig(n) {
