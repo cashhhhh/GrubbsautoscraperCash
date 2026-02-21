@@ -501,15 +501,14 @@
                       <div class="flex items-center justify-center gap-1.5">
                         <button
                           class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                          @click.stop.prevent="openPencilDesk(v)">
                           :disabled="!v.price_ok"
-                          @click="openPencilDesk(v)">
+                          @click.stop="openPencilDesk(v)">
                           Desk
                         </button>
                         <button
                           class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                           :disabled="!v.price_ok"
-                          @click="downloadMockPencil(v)">
+                          @click.stop="downloadMockPencil(v)">
                           Download
                         </button>
                       </div>
