@@ -1133,8 +1133,15 @@
               placeholder="e.g. 26000"
               class="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
           </div>
+          <button class="btn-primary text-xs" @click="lookupMarketValue()" :disabled="lookingUpMV || !modal?.vin">
+            <span x-show="!lookingUpMV">Look Up</span>
+            <span x-show="lookingUpMV">…</span>
+          </button>
           <button class="btn-ghost text-xs" @click="editForm.market_value=''; saveVehicle({clear_market_value:true})">Clear</button>
         </div>
+        <p x-show="mvLookupMsg" class="text-xs mt-1.5 font-semibold"
+          :class="mvLookupMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'"
+          x-text="mvLookupMsg"></p>
         <template x-if="editForm.market_value && editForm.price_override">
           <p class="text-xs mt-1.5"
             :class="((editForm.price_override - editForm.market_value)/editForm.market_value*100) > 5 ? 'text-red-600' : ((editForm.price_override - editForm.market_value)/editForm.market_value*100) < -5 ? 'text-emerald-600' : 'text-yellow-600'"
@@ -1414,9 +1421,33 @@
       <div class="space-y-4">
         <div class="bg-slate-50 rounded-xl p-4 space-y-3">
           <h3 class="text-sm font-bold text-slate-800">Finance Inputs</h3>
+          <!-- APR credit-tier presets -->
+          <div>
+            <p class="text-xs font-semibold text-slate-600 mb-1.5">Credit Tier <span class="text-slate-400 font-normal">(approx. 2026 rates)</span></p>
+            <div class="flex flex-wrap gap-1.5">
+              <template x-for="tier in aprPresets" :key="tier.label">
+                <button @click="mockPencil.apr = tier.apr; mockPencil.creditTier = tier.label"
+                  class="flex flex-col items-center px-2.5 py-1.5 rounded-lg border text-xs transition-all select-none"
+                  :class="mockPencil.creditTier === tier.label ? 'border-blue-500 bg-blue-600 text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'">
+                  <span class="font-bold leading-tight" x-text="tier.label"></span>
+                  <span class="opacity-75 leading-tight text-[10px]" x-text="tier.sub"></span>
+                  <span class="font-semibold mt-0.5" x-text="tier.apr.toFixed(2) + '%'"></span>
+                </button>
+              </template>
+              <button @click="mockPencil.creditTier = 'Custom'"
+                class="flex flex-col items-center px-2.5 py-1.5 rounded-lg border text-xs transition-all select-none"
+                :class="mockPencil.creditTier === 'Custom' ? 'border-blue-500 bg-blue-600 text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'">
+                <span class="font-bold leading-tight">Custom</span>
+                <span class="opacity-75 leading-tight text-[10px]">manual</span>
+                <span class="font-semibold mt-0.5" x-text="Number(mockPencil.apr||0).toFixed(2) + '%'"></span>
+              </button>
+            </div>
+          </div>
           <div class="grid grid-cols-2 gap-3">
             <label class="text-xs font-semibold text-slate-600">APR %
-              <input type="number" step="0.1" min="0" x-model.number="mockPencil.apr" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+              <input type="number" step="0.1" min="0" x-model.number="mockPencil.apr"
+                @input="mockPencil.creditTier = 'Custom'"
+                class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
             </label>
             <label class="text-xs font-semibold text-slate-600">Term (months)
               <input type="number" min="1" step="1" x-model.number="mockPencil.termMonths" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
@@ -1479,6 +1510,14 @@
           <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Out-the-Door</td><td class="py-2 text-right font-bold text-slate-900" x-text="fmtMoney(pencilTotals().outTheDoor)"></td></tr>
           <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Down Payment</td><td class="py-2 text-right font-semibold" x-text="fmtMoney(mockPencil.downPayment)"></td></tr>
           <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Amount Financed</td><td class="py-2 text-right font-bold text-fb" x-text="fmtMoney(pencilTotals().amountFinanced)"></td></tr>
+          <template x-if="pencilTotals().basePrice > 0">
+            <tr class="border-b border-slate-100">
+              <td class="py-2 text-slate-500">LTV</td>
+              <td class="py-2 text-right font-semibold text-xs"
+                :class="pencilTotals().ltv <= 110 ? 'text-emerald-600' : pencilTotals().ltv <= 130 ? 'text-amber-600' : 'text-red-600'"
+                x-text="pencilTotals().ltv.toFixed(1) + '%'"></td>
+            </tr>
+          </template>
           <template x-if="mockPencil.cost > 0">
             <tr class="border-t-2 border-slate-200">
               <td class="py-2 font-semibold text-slate-700">Front End Gross</td>
@@ -1546,94 +1585,6 @@
     </div>
   </div>
 </div>
-
-<!-- ════════════════════════════════════════════════════════════════════════ -->
-<!-- PENCIL DESKING MODAL                                                    -->
-<!-- ════════════════════════════════════════════════════════════════════════ -->
-<div x-show="pencilDeskOpen" x-cloak
-  class="fixed inset-0 z-50 flex items-center justify-center p-4"
-  @keydown.escape.window="pencilDeskOpen=false">
-  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="pencilDeskOpen=false"></div>
-  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[92vh] flex flex-col" x-transition>
-    <div class="flex items-center justify-between p-6 border-b border-slate-100">
-      <div>
-        <h2 class="text-base font-bold text-slate-900">Pencil Desking Dashboard</h2>
-        <p class="text-xs text-slate-400" x-text="pencilVehicle ? (pencilVehicle.year + ' ' + pencilVehicle.make + ' ' + pencilVehicle.model + ' · ' + (pencilVehicle.stock_number || pencilVehicle.vin)) : ''"></p>
-      </div>
-      <button @click="pencilDeskOpen=false" class="text-slate-400 hover:text-slate-700">
-        <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-      </button>
-    </div>
-    <div class="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="space-y-4">
-        <div class="bg-slate-50 rounded-xl p-4 space-y-3">
-          <h3 class="text-sm font-bold text-slate-800">Finance Inputs</h3>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="text-xs font-semibold text-slate-600">APR %
-              <input type="number" step="0.1" min="0" x-model.number="mockPencil.apr" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
-            </label>
-            <label class="text-xs font-semibold text-slate-600">Term (months)
-              <input type="number" min="1" step="1" x-model.number="mockPencil.termMonths" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
-            </label>
-          </div>
-          <label class="text-xs font-semibold text-slate-600">Down Payment
-            <input type="number" step="1" min="0" x-model.number="mockPencil.downPayment" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
-          </label>
-        </div>
-
-        <div class="bg-slate-50 rounded-xl p-4 space-y-3">
-          <h3 class="text-sm font-bold text-slate-800">Fee Setup (editable labels)</h3>
-          <div class="grid grid-cols-5 gap-2 items-end">
-            <label class="col-span-3 text-xs font-semibold text-slate-600">Addendum Label
-              <input type="text" x-model="mockPencil.addendumLabel" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
-            </label>
-            <label class="col-span-2 text-xs font-semibold text-slate-600">Amount
-              <input type="number" min="0" step="1" x-model.number="mockPencil.addendumAmount" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
-            </label>
-          </div>
-          <div class="grid grid-cols-5 gap-2 items-end">
-            <label class="col-span-3 text-xs font-semibold text-slate-600">Tax Label
-              <input type="text" x-model="mockPencil.taxLabel" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
-            </label>
-            <label class="col-span-2 text-xs font-semibold text-slate-600">Tax Rate %
-              <input type="number" min="0" step="0.01" x-model.number="mockPencil.taxRate" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
-            </label>
-          </div>
-          <div class="grid grid-cols-5 gap-2 items-end">
-            <label class="col-span-3 text-xs font-semibold text-slate-600">Doc Fee Label
-              <input type="text" x-model="mockPencil.docFeeLabel" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
-            </label>
-            <label class="col-span-2 text-xs font-semibold text-slate-600">Amount
-              <input type="number" min="0" step="1" x-model.number="mockPencil.docFeeAmount" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
-        <h3 class="text-sm font-bold text-slate-800">Live Pencil Preview</h3>
-        <table class="w-full text-sm">
-          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Internet Price</td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().basePrice)"></td></tr>
-          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500" x-text="mockPencil.addendumLabel"></td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().addendumAmount)"></td></tr>
-          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500" x-text="mockPencil.taxLabel + ' (' + Number(mockPencil.taxRate || 0).toFixed(2) + '%)'"></td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().taxAmount)"></td></tr>
-          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500" x-text="mockPencil.docFeeLabel"></td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().docFeeAmount)"></td></tr>
-          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Out-the-Door</td><td class="py-2 text-right font-bold text-slate-900" x-text="fmtMoney(pencilTotals().outTheDoor)"></td></tr>
-          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Down Payment</td><td class="py-2 text-right font-semibold" x-text="fmtMoney(mockPencil.downPayment)"></td></tr>
-          <tr><td class="py-2 text-slate-500">Amount Financed</td><td class="py-2 text-right font-bold text-fb" x-text="fmtMoney(pencilTotals().amountFinanced)"></td></tr>
-        </table>
-
-        <div class="rounded-xl bg-fb/10 border border-fb/20 p-4">
-          <p class="text-xs text-slate-600">Estimated Monthly Payment</p>
-          <p class="text-3xl font-extrabold text-fb" x-text="fmtMoney(pencilTotals().monthlyPayment)"></p>
-          <p class="text-xs text-slate-500 mt-1" x-text="Number(mockPencil.apr || 0).toFixed(2) + '% APR · ' + (mockPencil.termMonths || 0) + ' months'"></p>
-        </div>
-
-        <button class="btn-primary w-full justify-center" @click="downloadMockPencil(pencilVehicle)" :disabled="!pencilVehicle">Download Pencil</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <!-- SETTINGS MODAL                                                          -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
@@ -1832,6 +1783,7 @@ function dashboard() {
     pencilVehicle: null,
     mockPencil: {
       apr: 6.9,
+      creditTier: 'Custom',
       termMonths: 72,
       downPayment: 0,
       addendumLabel: 'Addendum',
@@ -1843,6 +1795,15 @@ function dashboard() {
       cost: 0,
       pack: 0,
     },
+    aprPresets: [
+      { label: 'Tier 1', sub: '750+ score', apr: 6.49 },
+      { label: 'Tier 2', sub: '700–749',    apr: 8.49 },
+      { label: 'Tier 3', sub: '650–699',    apr: 11.49 },
+      { label: 'Tier 4', sub: '600–649',    apr: 15.49 },
+      { label: 'Sub',    sub: '<600',        apr: 19.99 },
+    ],
+    lookingUpMV: false,
+    mvLookupMsg: '',
     // Cox report import
     coxReportText: '',
     coxImporting: false,
@@ -2136,11 +2097,32 @@ function dashboard() {
       this.savingVehicle = false
     },
 
+    async lookupMarketValue() {
+      if (!this.modal?.vin) return
+      this.lookingUpMV = true
+      this.mvLookupMsg = ''
+      try {
+        const r = await fetch('/api/market-value/' + encodeURIComponent(this.modal.vin))
+        const d = await r.json()
+        if (r.ok && d.market_value) {
+          this.editForm.market_value = String(d.market_value)
+          this.mvLookupMsg = '✓ Median from ' + d.comp_count + ' comps: $' + d.market_value.toLocaleString()
+          setTimeout(() => this.mvLookupMsg = '', 6000)
+        } else {
+          this.mvLookupMsg = d.detail || 'No comps found — enter manually'
+        }
+      } catch (e) {
+        this.mvLookupMsg = 'Lookup failed — check MarketCheck key'
+      }
+      this.lookingUpMV = false
+    },
+
     async triggerSync() {
       if (this.syncRunning) return
       this.syncRunning = true
       this.statusMsg = 'Sync started…'
       await fetch('/api/trigger-sync', { method: 'POST' })
+
       // Poll status every 3s
       const poll = setInterval(async () => {
         const r = await fetch('/api/sync-status')
@@ -2284,7 +2266,8 @@ function dashboard() {
       const cost  = Number(this.mockPencil.cost || 0)
       const pack  = Number(this.mockPencil.pack || 0)
       const gross = (basePrice + addendumAmount) - cost - pack
-      return { basePrice, addendumAmount, taxAmount, docFeeAmount, outTheDoor, amountFinanced, monthlyPayment, gross, cost, pack }
+      const ltv   = basePrice > 0 ? (amountFinanced / basePrice * 100) : 0
+      return { basePrice, addendumAmount, taxAmount, docFeeAmount, outTheDoor, amountFinanced, monthlyPayment, gross, cost, pack, ltv }
     },
 
     calcPayment(amount, apr, months) {

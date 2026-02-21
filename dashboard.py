@@ -657,6 +657,102 @@ def api_market_comps(vin: str = FPath(...), _: dict = Depends(_current_user)):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Market Value lookup — median from MarketCheck comps (reuses comps cache)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/api/market-value/{vin}")
+def api_market_value(vin: str = FPath(...), _: dict = Depends(_current_user)):
+    import statistics
+
+    settings   = db.get_all_settings(_ENV_ADDENDUM)
+    api_key    = settings.get("marketcheck_api_key", "")
+    dealer_zip = settings.get("dealer_zip", "")
+    radius     = settings.get("market_radius", 150)
+
+    if not api_key:
+        raise HTTPException(400, "MarketCheck API key not configured — add it in Settings")
+    if not dealer_zip:
+        raise HTTPException(400, "Dealer ZIP not configured — add it in Settings")
+
+    rows = db.get_vehicles(search=vin, active_only=False)
+    if not rows:
+        raise HTTPException(404, f"VIN {vin} not found")
+    v = rows[0]
+
+    make  = v.get("make", "")
+    model = v.get("model", "")
+    if not make or not model:
+        raise HTTPException(400, "Vehicle is missing make/model data")
+
+    # ── Reuse the same comps cache as /api/market-comps ───────────────────────
+    cache_key = f"{make.lower()}|{model.lower()}|{dealer_zip}|{radius}"
+    cached = db.get_comps_cache(cache_key)
+    if cached is None:
+        # Fetch fresh comps and store in cache
+        try:
+            resp = requests.get(
+                "https://api.marketcheck.com/v2/search/car/active",
+                params={
+                    "api_key":    api_key,
+                    "make":       make,
+                    "model":      model,
+                    "car_type":   "used",
+                    "zip":        dealer_zip,
+                    "radius":     radius,
+                    "rows":       30,
+                    "sort_by":    "price",
+                    "sort_order": "asc",
+                },
+                timeout=15,
+            )
+            data = resp.json()
+        except Exception as exc:
+            raise HTTPException(502, f"MarketCheck request failed: {exc}")
+
+        if resp.status_code != 200:
+            msg = data.get("message") or data.get("error", {}).get("message", "") or resp.text[:200]
+            raise HTTPException(502, f"MarketCheck ({resp.status_code}): {msg}")
+
+        if "error" in data:
+            raise HTTPException(502, f"MarketCheck: {data['error'].get('message', 'Unknown error')}")
+
+        our_price = v.get("price_override") if v.get("price_override") is not None else v.get("price_dollars")
+        listings = data.get("listings", [])
+        cached = []
+        for lst in listings:
+            price = lst.get("price")
+            dealer = lst.get("dealer") or {}
+            cached.append({
+                "vin":            lst.get("vin", ""),
+                "heading":        lst.get("heading", ""),
+                "price":          price,
+                "miles":          lst.get("miles"),
+                "trim":           lst.get("trim", ""),
+                "year":           lst.get("year"),
+                "exterior_color": lst.get("exterior_color", ""),
+                "dealer_name":    dealer.get("name", ""),
+                "dealer_city":    dealer.get("city", ""),
+                "dealer_state":   dealer.get("state", ""),
+                "dom":            lst.get("dom"),
+                "vdp_url":        lst.get("vdp_url", ""),
+                "beats_us":       (price < our_price) if (price and our_price) else None,
+                "price_diff":     (price - our_price) if (price and our_price) else None,
+            })
+        db.set_comps_cache(cache_key, cached)
+
+    prices = [c["price"] for c in cached if c.get("price") and c["price"] > 0]
+    if not prices:
+        raise HTTPException(404, detail="No comparable listings found for this vehicle")
+
+    median_price = round(statistics.median(prices))
+    return {
+        "market_value": median_price,
+        "comp_count":   len(prices),
+        "make":         make,
+        "model":        model,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # VIN Decode  (MarketCheck — cached permanently)
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/api/vin-decode/{vin}")
