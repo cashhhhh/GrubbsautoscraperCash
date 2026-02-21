@@ -379,6 +379,7 @@ def get_vehicles(
     year: str = "",
     search: str = "",
     active_only: bool = True,
+    three_row_only: bool = False,
 ) -> list[dict]:
     filters: list[str] = []
     params:  list      = []
@@ -404,6 +405,9 @@ def get_vehicles(
         filters.append("(v.title LIKE ? OR v.vin LIKE ? OR v.stock_number LIKE ? OR v.model LIKE ?)")
         s = f"%{search}%"
         params.extend([s, s, s, s])
+    if three_row_only:
+        filters.append("LOWER(v.body_style) LIKE '%suv%'")
+        filters.append("(LOWER(v.title) LIKE '%3rd row%' OR LOWER(v.title) LIKE '%third row%' OR LOWER(v.title) LIKE '%7-pass%' OR LOWER(v.title) LIKE '%8-pass%' OR LOWER(v.title) LIKE '%3-row%' OR LOWER(v.trim) LIKE '%3rd row%' OR LOWER(v.trim) LIKE '%third row%' OR LOWER(v.trim) LIKE '%7-pass%' OR LOWER(v.trim) LIKE '%8-pass%' OR LOWER(v.trim) LIKE '%3-row%')")
 
     where = "WHERE " + " AND ".join(filters) if filters else ""
 
@@ -525,6 +529,43 @@ def get_makes() -> list[str]:
         rows = c.execute("SELECT DISTINCT make FROM vehicles WHERE is_active=1 AND make!='' ORDER BY make").fetchall()
     return [r["make"] for r in rows]
 
+
+
+def get_deal_history(limit: int = 100) -> list[dict]:
+    """Best-effort sold/deal history based on units no longer active in feed."""
+    with _conn() as c:
+        rows = c.execute("""
+            SELECT
+                vin, stock_number, year, make, model, trim,
+                COALESCE(price_override, price_dollars) AS sold_price,
+                first_seen, last_seen,
+                CAST((julianday(last_seen) - julianday(first_seen)) AS INTEGER) AS days_listed
+            FROM vehicles
+            WHERE is_active = 0
+            ORDER BY last_seen DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+
+        bench_rows = c.execute("""
+            SELECT make, model,
+                   ROUND(AVG(CAST((julianday(last_seen) - julianday(first_seen)) AS INTEGER)), 1) AS avg_days,
+                   ROUND(AVG(COALESCE(price_override, price_dollars)), 0) AS avg_price
+            FROM vehicles
+            WHERE is_active = 0
+              AND first_seen IS NOT NULL
+              AND last_seen IS NOT NULL
+            GROUP BY make, model
+        """).fetchall()
+
+    benchmarks = {(r["make"], r["model"]): {"avg_days": r["avg_days"], "avg_price": r["avg_price"]} for r in bench_rows}
+
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["days_listed"] = max(0, int(d.get("days_listed") or 0))
+        d["benchmark"] = benchmarks.get((d.get("make"), d.get("model")), {"avg_days": None, "avg_price": None})
+        out.append(d)
+    return out
 
 def get_years() -> list[int]:
     with _conn() as c:

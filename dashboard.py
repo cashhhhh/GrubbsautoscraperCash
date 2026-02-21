@@ -10,7 +10,7 @@ Start:
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -94,6 +94,28 @@ def _enrich_vehicle(v: dict, addendum: int) -> dict:
         v["pct_to_market"] = round((ep - mv) / mv * 100, 1)
     else:
         v["pct_to_market"] = None
+
+    # Inventory intelligence flags
+    body = (v.get("body_style") or "").lower()
+    text_blob = " ".join([
+        str(v.get("title") or ""),
+        str(v.get("trim") or ""),
+        str(v.get("model") or ""),
+    ]).lower()
+    three_row_terms = ("3rd row", "third row", "7-pass", "7 pass", "8-pass", "captain chairs", "3-row")
+    v["is_three_row_suv"] = ("suv" in body) and any(t in text_blob for t in three_row_terms)
+
+    first_seen = v.get("first_seen")
+    dol = 0
+    if first_seen:
+        try:
+            dol = max(0, (datetime.utcnow() - datetime.fromisoformat(first_seen)).days)
+        except ValueError:
+            dol = 0
+    v["days_on_lot"] = dol
+
+    # Price war detector: undercut when market value benchmark beats our current effective price.
+    v["price_war_alert"] = bool(ep and mv and mv > 0 and ep > mv)
 
     return v
 
@@ -223,12 +245,13 @@ def api_vehicles(
     year:        str  = Query(default=""),
     search:      str  = Query(default=""),
     active_only: bool = Query(default=True),
+    three_row_only: bool = Query(default=False),
     _: dict = Depends(_current_user),
 ):
     addendum = _effective_addendum()
     vehicles = db.get_vehicles(
         make=make, condition=condition, body_style=body_style,
-        year=year, search=search, active_only=active_only,
+        year=year, search=search, active_only=active_only, three_row_only=three_row_only,
     )
     return {"vehicles": [_enrich_vehicle(v, addendum) for v in vehicles],
             "count": len(vehicles),
@@ -291,6 +314,49 @@ def api_comparable(vin: str, _: dict = Depends(_current_user)):
         enriched.append({**c, "addendum_amount": addendum,
                          "price_with_addendum": (ep + addendum) if ep else None})
     return {"comparables": enriched, "count": len(enriched)}
+
+
+@app.get("/api/deal-history")
+def api_deal_history(limit: int = Query(default=100), _: dict = Depends(_current_user)):
+    return {"deals": db.get_deal_history(limit)}
+
+
+@app.post("/api/weekly-digest")
+def api_weekly_digest(_: dict = Depends(_current_user)):
+    summary = db.get_summary(_effective_addendum())
+    vehicles = [
+        _enrich_vehicle(v, _effective_addendum())
+        for v in db.get_vehicles(active_only=True)
+    ]
+    stale_units = sorted(
+        [v for v in vehicles if (v.get("days_on_lot") or 0) >= 45],
+        key=lambda x: x.get("days_on_lot") or 0,
+        reverse=True,
+    )[:10]
+    top_units = sorted(vehicles, key=lambda x: x.get("fb_clicks") or 0, reverse=True)[:10]
+
+    digest = {
+        "generated_at": datetime.utcnow().isoformat(timespec="seconds"),
+        "window_start": (datetime.utcnow() - timedelta(days=7)).date().isoformat(),
+        "window_end": datetime.utcnow().date().isoformat(),
+        "kpis": {
+            "active_listings": summary.get("total_active", 0),
+            "fb_clicks": summary.get("total_clicks", 0),
+            "fb_impressions": summary.get("total_impressions", 0),
+            "fb_saves": summary.get("total_saves", 0),
+        },
+        "top_performers": [
+            {"vin": v.get("vin"), "title": v.get("title"), "clicks": v.get("fb_clicks", 0), "impressions": v.get("fb_impressions", 0)}
+            for v in top_units
+        ],
+        "most_aged": [
+            {"vin": v.get("vin"), "title": v.get("title"), "days_on_lot": v.get("days_on_lot", 0), "price": v.get("effective_price")}
+            for v in stale_units
+        ],
+    }
+    return {"ok": True, "digest": digest}
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
