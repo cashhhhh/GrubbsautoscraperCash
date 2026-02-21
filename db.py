@@ -100,7 +100,28 @@ def init_db() -> None:
             created_at    TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS deals (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            vin             TEXT NOT NULL,
+            created_at      TEXT NOT NULL,
+            created_by      TEXT DEFAULT '',
+            customer_name   TEXT DEFAULT '',
+            base_price      INTEGER,
+            addendum_amount INTEGER DEFAULT 0,
+            tax_rate        REAL DEFAULT 0,
+            doc_fee         INTEGER DEFAULT 0,
+            down_payment    INTEGER DEFAULT 0,
+            apr             REAL DEFAULT 0,
+            term_months     INTEGER DEFAULT 72,
+            out_the_door    INTEGER,
+            amount_financed INTEGER,
+            monthly_payment REAL,
+            gross           INTEGER,
+            notes           TEXT DEFAULT ''
+        );
+
         CREATE INDEX IF NOT EXISTS idx_vs_vin   ON vehicle_stats(vin);
+        CREATE INDEX IF NOT EXISTS idx_deals_vin ON deals(vin);
         CREATE INDEX IF NOT EXISTS idx_vs_date  ON vehicle_stats(stat_date);
         CREATE INDEX IF NOT EXISTS idx_v_make   ON vehicles(make);
         CREATE INDEX IF NOT EXISTS idx_v_active ON vehicles(is_active);
@@ -223,7 +244,16 @@ def get_all_settings(env_addendum: int = 0) -> dict:
         addendum = int(raw)
     except (ValueError, TypeError):
         addendum = env_addendum
-    return {"addendum_amount": addendum}
+    try:
+        radius = int(get_setting("market_radius", "150"))
+    except (ValueError, TypeError):
+        radius = 150
+    return {
+        "addendum_amount": addendum,
+        "marketcheck_api_key": get_setting("marketcheck_api_key", ""),
+        "dealer_zip": get_setting("dealer_zip", ""),
+        "market_radius": radius,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -607,3 +637,59 @@ def get_years() -> list[int]:
     with _conn() as c:
         rows = c.execute("SELECT DISTINCT year FROM vehicles WHERE is_active=1 AND year IS NOT NULL ORDER BY year DESC").fetchall()
     return [r["year"] for r in rows]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deals (saved pencil history)
+# ─────────────────────────────────────────────────────────────────────────────
+def save_deal(deal: dict) -> int:
+    """Insert a saved pencil deal. Returns the new row id."""
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    with _conn() as c:
+        cur = c.execute("""
+            INSERT INTO deals
+                (vin, created_at, created_by, customer_name,
+                 base_price, addendum_amount, tax_rate, doc_fee,
+                 down_payment, apr, term_months,
+                 out_the_door, amount_financed, monthly_payment, gross, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            deal.get("vin", ""),
+            now,
+            deal.get("created_by", ""),
+            deal.get("customer_name", ""),
+            deal.get("base_price"),
+            deal.get("addendum_amount", 0),
+            deal.get("tax_rate", 0),
+            deal.get("doc_fee", 0),
+            deal.get("down_payment", 0),
+            deal.get("apr", 0),
+            deal.get("term_months", 72),
+            deal.get("out_the_door"),
+            deal.get("amount_financed"),
+            deal.get("monthly_payment"),
+            deal.get("gross"),
+            deal.get("notes", ""),
+        ))
+    return cur.lastrowid
+
+
+def get_deals(vin: str = "", limit: int = 50) -> list[dict]:
+    """Return saved deals, optionally filtered by VIN, newest first."""
+    with _conn() as c:
+        if vin:
+            rows = c.execute("""
+                SELECT d.*, v.year, v.make, v.model, v.trim, v.stock_number
+                FROM deals d
+                LEFT JOIN vehicles v ON v.vin = d.vin
+                WHERE d.vin = ?
+                ORDER BY d.id DESC LIMIT ?
+            """, (vin, limit)).fetchall()
+        else:
+            rows = c.execute("""
+                SELECT d.*, v.year, v.make, v.model, v.trim, v.stock_number
+                FROM deals d
+                LEFT JOIN vehicles v ON v.vin = d.vin
+                ORDER BY d.id DESC LIMIT ?
+            """, (limit,)).fetchall()
+    return [dict(r) for r in rows]

@@ -24,6 +24,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     [x-cloak]{display:none!important}
     ::-webkit-scrollbar{width:6px;height:6px}
@@ -91,6 +92,12 @@
       <div x-show="isAdmin" class="nav-item" :class="tab==='users'&&'active'" @click="tab='users';loadUsers()">
         <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>
         Users
+      </div>
+
+      <!-- Deals history -->
+      <div class="nav-item" :class="tab==='deals'&&'active'" @click="tab='deals';loadDeals()">
+        <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/></svg>
+        Deal History
       </div>
 
       <div class="my-3 border-t border-white/10"></div>
@@ -664,6 +671,66 @@
         </div>
       </div>
 
+      <!-- ══ DEALS TAB ══════════════════════════════════════════════════════ -->
+      <div x-show="tab==='deals'" class="space-y-5">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-bold text-slate-800">Deal History</h2>
+            <p class="text-xs text-slate-400">All saved pencil deals, newest first</p>
+          </div>
+        </div>
+
+        <!-- Loading -->
+        <div x-show="dealsLoading" class="text-center text-slate-400 py-12 text-sm animate-pulse">Loading deals…</div>
+
+        <!-- Empty state -->
+        <div x-show="!dealsLoading && deals.length === 0" class="text-center py-16 text-slate-400">
+          <svg class="w-10 h-10 mx-auto mb-3 opacity-30 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/></svg>
+          <p class="text-sm font-medium">No saved deals yet</p>
+          <p class="text-xs mt-1">Click "Save Deal" inside the Pencil Desking tool to save a deal here.</p>
+        </div>
+
+        <!-- Table -->
+        <div x-show="!dealsLoading && deals.length > 0" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-100">
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Vehicle</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Internet Price</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">OTD Price</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Payment</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Front Gross</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">By</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <template x-for="d in deals" :key="d.id">
+                <tr class="hover:bg-slate-50 transition-colors">
+                  <td class="px-4 py-3 text-xs text-slate-400" x-text="d.created_at ? d.created_at.replace('T',' ').slice(0,16) : '—'"></td>
+                  <td class="px-4 py-3">
+                    <p class="font-semibold text-slate-800 text-xs" x-text="[d.year, d.make, d.model, d.trim].filter(Boolean).join(' ') || d.vin"></p>
+                    <p class="text-xs text-slate-400" x-text="d.stock_number ? 'Stock #' + d.stock_number : d.vin"></p>
+                  </td>
+                  <td class="px-4 py-3 text-xs text-slate-600" x-text="d.customer_name || '—'"></td>
+                  <td class="px-4 py-3 text-right font-semibold text-xs" x-text="d.base_price ? '$' + Number(d.base_price).toLocaleString() : '—'"></td>
+                  <td class="px-4 py-3 text-right font-bold text-xs text-slate-800" x-text="d.out_the_door ? '$' + Number(d.out_the_door).toLocaleString() : '—'"></td>
+                  <td class="px-4 py-3 text-right text-xs text-fb font-bold">
+                    <span x-text="d.monthly_payment ? '$' + Number(d.monthly_payment).toFixed(0) + '/mo' : '—'"></span>
+                    <p class="text-slate-400 font-normal" x-text="d.apr + '% · ' + d.term_months + ' mo'"></p>
+                  </td>
+                  <td class="px-4 py-3 text-right font-bold text-xs"
+                    :class="(d.gross || 0) >= 0 ? 'text-emerald-600' : 'text-red-500'"
+                    x-text="d.gross != null ? '$' + Number(d.gross).toLocaleString() : '—'"></td>
+                  <td class="px-4 py-3 text-xs text-slate-500" x-text="d.created_by || '—'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div><!-- /main content -->
   </main>
 </div>
@@ -719,6 +786,12 @@
         @click="modalTab='comps'; loadComparables()">
         Comparables
         <span x-show="comparables.length > 0" class="badge bg-slate-200 text-slate-600 text-xs" x-text="comparables.length"></span>
+      </button>
+      <button class="py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5"
+        :class="modalTab==='market' ? 'border-fb text-fb' : 'border-transparent text-slate-400 hover:text-slate-700'"
+        @click="modalTab='market'; loadMarketComps()">
+        Market
+        <span x-show="marketComps.length > 0" class="badge bg-slate-200 text-slate-600 text-xs" x-text="marketComps.length"></span>
       </button>
     </div>
 
@@ -924,6 +997,107 @@
         </div>
       </template>
     </div>
+
+    <!-- ── MARKET TAB ── -->
+    <div x-show="modalTab==='market'" class="overflow-y-auto p-6 space-y-4 text-sm">
+      <!-- Loading -->
+      <div x-show="loadingMarket" class="text-center text-slate-400 text-xs py-6 animate-pulse">Fetching competitor listings from MarketCheck…</div>
+
+      <!-- Error -->
+      <div x-show="marketError && !loadingMarket" class="bg-red-50 border border-red-200 rounded-xl p-4">
+        <p class="text-xs font-semibold text-red-700" x-text="marketError"></p>
+        <p x-show="marketError && marketError.includes('API key')" class="text-xs text-red-500 mt-1">Go to Settings → enter your MarketCheck API key and dealer ZIP.</p>
+      </div>
+
+      <!-- Summary bar -->
+      <template x-if="!loadingMarket && !marketError && marketComps.length > 0">
+        <div>
+          <div class="flex gap-3 mb-4 flex-wrap">
+            <div class="bg-slate-50 rounded-xl px-4 py-2 text-center">
+              <p class="text-xs text-slate-400">Competitors</p>
+              <p class="text-lg font-bold text-slate-800" x-text="marketComps.length"></p>
+            </div>
+            <div class="bg-red-50 rounded-xl px-4 py-2 text-center">
+              <p class="text-xs text-red-500">Beating Our Price</p>
+              <p class="text-lg font-bold text-red-600" x-text="marketComps.filter(c=>c.beats_us).length"></p>
+            </div>
+            <div class="bg-emerald-50 rounded-xl px-4 py-2 text-center">
+              <p class="text-xs text-emerald-600">We Beat Them</p>
+              <p class="text-lg font-bold text-emerald-700" x-text="marketComps.filter(c=>c.beats_us===false).length"></p>
+            </div>
+            <template x-if="marketSearch">
+              <div class="bg-slate-50 rounded-xl px-4 py-2 text-center">
+                <p class="text-xs text-slate-400">Search Radius</p>
+                <p class="text-lg font-bold text-slate-800" x-text="marketSearch.radius + ' mi'"></p>
+              </div>
+            </template>
+          </div>
+
+          <!-- Our price reference -->
+          <template x-if="marketOurPrice">
+            <div class="flex items-center gap-2 mb-3 text-xs text-slate-500">
+              <span class="inline-block w-3 h-3 rounded-full bg-fb shrink-0"></span>
+              Our internet price: <strong class="text-slate-800" x-text="'$' + Number(marketOurPrice).toLocaleString()"></strong>
+            </div>
+          </template>
+
+          <!-- Listings -->
+          <div class="space-y-2">
+            <template x-for="(c, i) in marketComps" :key="i">
+              <div class="flex items-center gap-3 p-3 rounded-xl border transition-colors"
+                :class="c.beats_us ? 'border-red-200 bg-red-50' : 'border-slate-100 bg-slate-50'">
+                <!-- rank badge -->
+                <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold"
+                  :class="c.beats_us ? 'bg-red-200 text-red-800' : 'bg-slate-200 text-slate-600'"
+                  x-text="i+1"></div>
+                <!-- info -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <p class="text-xs font-semibold text-slate-800" x-text="[c.year, c.heading || ''].join(' ').trim() || '—'"></p>
+                    <template x-if="c.beats_us">
+                      <span class="badge bg-red-200 text-red-800 text-xs">Cheaper</span>
+                    </template>
+                  </div>
+                  <p class="text-xs text-slate-400" x-text="(c.miles ? Number(c.miles).toLocaleString() + ' mi · ' : '') + (c.exterior_color || '') + (c.trim ? ' · ' + c.trim : '')"></p>
+                  <p class="text-xs text-slate-500 font-medium" x-text="[c.dealer_name, c.dealer_city, c.dealer_state].filter(Boolean).join(', ')"></p>
+                  <p x-show="c.dom != null" class="text-xs text-slate-400" x-text="c.dom + ' days on market'"></p>
+                </div>
+                <!-- price -->
+                <div class="text-right shrink-0">
+                  <template x-if="c.price">
+                    <p class="text-sm font-bold"
+                      :class="c.beats_us ? 'text-red-600' : 'text-emerald-700'"
+                      x-text="'$' + Number(c.price).toLocaleString()"></p>
+                  </template>
+                  <template x-if="!c.price"><p class="text-xs text-slate-400">No price</p></template>
+                  <template x-if="c.price_diff != null">
+                    <p class="text-xs font-semibold"
+                      :class="c.beats_us ? 'text-red-500' : 'text-slate-400'"
+                      x-text="(c.price_diff > 0 ? '+' : '') + '$' + Math.abs(c.price_diff).toLocaleString() + ' vs us'"></p>
+                  </template>
+                </div>
+                <a x-show="c.vdp_url" :href="c.vdp_url" target="_blank" rel="noopener" class="text-xs text-fb hover:underline shrink-0">View ↗</a>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- No results -->
+      <div x-show="!loadingMarket && !marketError && marketComps.length === 0 && marketFetched"
+        class="text-center text-slate-400 text-xs py-6">
+        No competitor listings found within the search radius for this make/model.
+      </div>
+
+      <!-- Prompt to load -->
+      <div x-show="!loadingMarket && !marketFetched && !marketError" class="text-center py-8">
+        <button class="btn-primary text-xs" @click="loadMarketComps()">
+          <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+          Fetch Competitor Prices
+        </button>
+        <p class="text-xs text-slate-400 mt-2">Powered by MarketCheck — requires API key in Settings</p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1054,7 +1228,28 @@
           </table>
         </div>
 
-        <button class="btn-primary w-full justify-center" @click="downloadMockPencil(pencilVehicle)" :disabled="!pencilVehicle">Download Pencil</button>
+        <!-- Customer name + action buttons -->
+        <div class="border-t border-slate-100 pt-4 space-y-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-600">Customer Name <span class="text-slate-400 font-normal">(optional)</span></label>
+            <input type="text" x-model="pencilCustomerName" placeholder="e.g. John Smith"
+              class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          </div>
+          <div class="flex gap-2">
+            <button class="btn-primary flex-1 justify-center" @click="downloadMockPencilPDF(pencilVehicle)" :disabled="!pencilVehicle || pdfGenerating">
+              <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+              <span x-text="pdfGenerating ? 'Generating…' : 'Download PDF'"></span>
+            </button>
+            <button class="btn-ghost flex-1 justify-center border border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+              @click="saveDeal(pencilVehicle)" :disabled="!pencilVehicle || dealSaving">
+              <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span x-text="dealSaving ? 'Saving…' : 'Save Deal'"></span>
+            </button>
+          </div>
+          <p x-show="dealSaveMsg" class="text-xs font-semibold text-center"
+            :class="dealSaveOk ? 'text-emerald-600' : 'text-red-500'"
+            x-text="dealSaveMsg"></p>
+        </div>
       </div>
     </div>
   </div>
@@ -1111,11 +1306,38 @@
         </div>
       </div>
 
+      <!-- MarketCheck Integration -->
+      <div class="border-t border-slate-100 pt-5">
+        <label class="block text-sm font-semibold text-slate-700 mb-1">MarketCheck API Key</label>
+        <p class="text-xs text-slate-400 mb-2">Powers the "Market" tab — shows live competitor prices near you. Get a free key at <span class="text-fb">marketcheck.com</span>.</p>
+        <input type="text" x-model="settings.marketcheck_api_key" placeholder="mc_api_key_..."
+          class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb font-mono" />
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Dealer ZIP Code</label>
+        <p class="text-xs text-slate-400 mb-2">Center point for competitor search radius.</p>
+        <div class="flex gap-2">
+          <input type="text" x-model="settings.dealer_zip" placeholder="e.g. 78201"
+            class="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+          <div class="flex items-center gap-1.5">
+            <input type="number" min="10" max="500" step="10" x-model.number="settings.market_radius"
+              class="w-20 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb" />
+            <span class="text-xs text-slate-400">mi radius</span>
+          </div>
+        </div>
+        <button class="btn-primary text-sm mt-3" @click="saveSettings()" :disabled="savingSettings">
+          <span x-show="!savingSettings">Save All Settings</span>
+          <span x-show="savingSettings">Saving…</span>
+        </button>
+        <p x-show="settingsSaveMsg" class="text-xs text-emerald-600 font-semibold mt-2" x-text="settingsSaveMsg"></p>
+      </div>
+
       <!-- Info -->
       <div class="bg-slate-50 rounded-xl p-4 text-xs text-slate-500 space-y-1">
         <p><strong class="text-slate-700">Per-vehicle overrides</strong> — open any vehicle, go to "Edit / Pricing" tab.</p>
         <p><strong class="text-slate-700">Market Value (% to Market)</strong> — enter a KBB or reference price per vehicle on the Edit tab, or import a Cox report above.</p>
         <p><strong class="text-slate-700">Comparables</strong> — same make &amp; model within ±4 years, from your active catalog.</p>
+        <p><strong class="text-slate-700">Market tab</strong> — live competitor listings from MarketCheck (requires API key above).</p>
       </div>
     </div>
   </div>
@@ -1146,7 +1368,7 @@ function dashboard() {
     isAdmin: false,
     // settings modal
     settingsOpen: false,
-    settings: { addendum_amount: 0 },
+    settings: { addendum_amount: 0, marketcheck_api_key: '', dealer_zip: '', market_radius: 150 },
     savingSettings: false,
     settingsSaveMsg: '',
     // vehicle edit
@@ -1183,6 +1405,23 @@ function dashboard() {
     coxImporting: false,
     coxImportMsg: '',
     coxImportOk: true,
+    // deals history
+    deals: [],
+    dealsLoading: false,
+    // pencil save deal
+    pencilCustomerName: '',
+    dealSaving: false,
+    dealSaveMsg: '',
+    dealSaveOk: true,
+    // PDF generation
+    pdfGenerating: false,
+    // market comps
+    marketComps: [],
+    marketOurPrice: null,
+    marketSearch: null,
+    marketError: '',
+    marketFetched: false,
+    loadingMarket: false,
 
     get bodyStyles() {
       const set = new Set(this.vehicles.map(v => v.body_style).filter(Boolean))
@@ -1288,7 +1527,12 @@ function dashboard() {
       const r = await fetch('/api/settings', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ addendum_amount: parseInt(this.settings.addendum_amount) || 0 })
+        body: JSON.stringify({
+          addendum_amount:     parseInt(this.settings.addendum_amount) || 0,
+          marketcheck_api_key: this.settings.marketcheck_api_key || '',
+          dealer_zip:          this.settings.dealer_zip || '',
+          market_radius:       parseInt(this.settings.market_radius) || 150,
+        })
       })
       const d = await r.json()
       this.settings = d
@@ -1330,6 +1574,9 @@ function dashboard() {
       this.modal = v
       this.modalTab = tab
       this.comparables = []
+      this.marketComps = []
+      this.marketError = ''
+      this.marketFetched = false
       this.saveMsg = ''
       this.editForm = {
         price_override:    v.price_override   != null ? String(v.price_override)   : '',
@@ -1427,7 +1674,7 @@ function dashboard() {
     },
 
     tabLabel() {
-      return { inventory:'Inventory', analytics:'Analytics', history:'Sync History', users:'User Management' }[this.tab] || ''
+      return { inventory:'Inventory', analytics:'Analytics', history:'Sync History', users:'User Management', deals:'Deal History' }[this.tab] || ''
     },
 
     ctr() {
@@ -1502,6 +1749,227 @@ function dashboard() {
       const n = Number(months || 1)
       if (r <= 0) return amount / n
       return amount * r / (1 - Math.pow(1 + r, -n))
+    },
+
+    async loadDeals() {
+      this.dealsLoading = true
+      const r = await fetch('/api/deals?limit=100')
+      if (r.ok) { const d = await r.json(); this.deals = d.deals }
+      this.dealsLoading = false
+    },
+
+    async saveDeal(v) {
+      if (!v?.price_ok || !v?.effective_price) {
+        alert('This unit needs an internet price before saving a deal.')
+        return
+      }
+      this.dealSaving = true
+      this.dealSaveMsg = ''
+      const t = this.pencilTotals()
+      const payload = {
+        vin:             v.vin,
+        customer_name:   this.pencilCustomerName,
+        base_price:      Math.round(t.basePrice),
+        addendum_amount: Math.round(t.addendumAmount),
+        tax_rate:        Number(this.mockPencil.taxRate || 0),
+        doc_fee:         Math.round(t.docFeeAmount),
+        down_payment:    Math.round(Number(this.mockPencil.downPayment || 0)),
+        apr:             Number(this.mockPencil.apr || 0),
+        term_months:     Number(this.mockPencil.termMonths || 72),
+        out_the_door:    Math.round(t.outTheDoor),
+        amount_financed: Math.round(t.amountFinanced),
+        monthly_payment: Number(t.monthlyPayment.toFixed(2)),
+        gross:           Math.round(t.gross),
+      }
+      try {
+        const r = await fetch('/api/deals', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(payload),
+        })
+        if (r.ok) {
+          this.dealSaveMsg = 'Deal saved!'
+          this.dealSaveOk = true
+        } else {
+          const d = await r.json()
+          this.dealSaveMsg = d.detail || 'Error saving deal'
+          this.dealSaveOk = false
+        }
+      } catch(e) {
+        this.dealSaveMsg = 'Network error'
+        this.dealSaveOk = false
+      }
+      this.dealSaving = false
+      setTimeout(() => this.dealSaveMsg = '', 4000)
+    },
+
+    async loadMarketComps() {
+      if (!this.modal?.vin) return
+      this.loadingMarket = true
+      this.marketError = ''
+      this.marketComps = []
+      this.marketFetched = false
+      try {
+        const r = await fetch('/api/market-comps/' + encodeURIComponent(this.modal.vin))
+        const d = await r.json()
+        if (r.ok) {
+          this.marketComps  = d.listings
+          this.marketOurPrice = d.our_price
+          this.marketSearch  = d.search
+          this.marketFetched = true
+        } else {
+          this.marketError  = d.detail || 'Failed to fetch competitor data'
+        }
+      } catch(e) {
+        this.marketError = 'Network error — could not reach MarketCheck'
+      }
+      this.loadingMarket = false
+    },
+
+    async downloadMockPencilPDF(v) {
+      if (!v?.price_ok || !v?.effective_price) {
+        alert('This unit needs an internet price before generating a PDF.')
+        return
+      }
+      this.pdfGenerating = true
+      // Build the worksheet HTML (same content, no outer html/head/body wrapper)
+      const basePrice      = Number(v.effective_price)
+      const addendum       = Number(this.mockPencil.addendumAmount || 0)
+      const taxRate        = Number(this.mockPencil.taxRate || 0) / 100
+      const taxAmount      = Number(((basePrice + addendum) * taxRate).toFixed(2))
+      const docFee         = Number(this.mockPencil.docFeeAmount || 0)
+      const downPayment    = Number(this.mockPencil.downPayment || 0)
+      const outTheDoor     = Number((basePrice + addendum + taxAmount + docFee).toFixed(2))
+      const amountFinanced = Math.max(0, outTheDoor - downPayment)
+      const apr            = Number(this.mockPencil.apr || 0)
+      const cost           = Number(this.mockPencil.cost || 0)
+      const pack           = Number(this.mockPencil.pack || 0)
+      const gross          = (basePrice + addendum) - cost - pack
+      const calcPmt = (amt, a, n) => { const r = a/100/12; if(r<=0) return amt/n; return amt*r/(1-Math.pow(1+r,-n)) }
+      const fmt    = n => Number(n||0).toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0})
+      const fmtD   = n => Number(n||0).toLocaleString('en-US',{style:'currency',currency:'USD'})
+      const vehicleLabel = `${v.year||''} ${v.make||''} ${v.model||''}`.trim()
+      const fullLabel    = v.trim ? `${vehicleLabel} ${v.trim}` : vehicleLabel
+      const stock   = v.stock_number || 'N/A'
+      const vin     = v.vin || 'N/A'
+      const mileage = v.mileage ? Number(v.mileage).toLocaleString() + ' mi' : '—'
+      const color   = v.exterior_color || '—'
+      const dateStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})
+      const imgUrl  = v.image_url || ''
+      const addendumLabel = this.mockPencil.addendumLabel || 'Addendum'
+      const taxLabel      = this.mockPencil.taxLabel || 'Sales Tax'
+      const docFeeLabel   = this.mockPencil.docFeeLabel || 'Doc Fee'
+      const terms   = [48, 60, 72, 84]
+      const pmtCols = terms.map(t => {
+        const pmt = calcPmt(amountFinanced, apr, t)
+        const hi  = t === 72
+        return `<td style="padding:16px 12px;text-align:center;background:${hi?'#1877F2':'#f8fafc'};border-radius:10px;vertical-align:top;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${hi?'rgba(255,255,255,.75)':'#94a3b8'};margin-bottom:6px;">${t} mo</div>
+          <div style="font-size:22px;font-weight:800;color:${hi?'#fff':'#0f172a'};line-height:1;">${fmtD(pmt)}</div>
+          <div style="font-size:10px;color:${hi?'rgba(255,255,255,.65)':'#94a3b8'};margin-top:4px;">per month</div>
+        </td>`
+      }).join('<td style="width:8px;"></td>')
+
+      const worksheetHTML = `
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,system-ui,sans-serif;background:#f1f5f9;color:#0f172a;}
+.page{max-width:780px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;}
+.hd{background:#0f172a;padding:28px 32px;display:flex;align-items:center;justify-content:space-between;}
+.hd-left h1{font-size:20px;font-weight:800;color:#fff;}
+.hd-left p{font-size:12px;color:#94a3b8;margin-top:4px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;}
+.hd-right{text-align:right;}
+.hd-right .badge{display:inline-block;background:#1877F2;color:#fff;font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;letter-spacing:.04em;text-transform:uppercase;}
+.hd-right .date{font-size:11px;color:#64748b;margin-top:6px;}
+.veh{display:flex;align-items:stretch;border-bottom:1px solid #e2e8f0;}
+.veh-img{width:220px;min-height:140px;flex-shrink:0;overflow:hidden;background:#f8fafc;}
+.veh-img img{width:100%;height:100%;object-fit:cover;display:block;}
+.veh-info{flex:1;padding:20px 24px;display:flex;flex-direction:column;justify-content:center;gap:6px;}
+.veh-name{font-size:18px;font-weight:800;color:#0f172a;line-height:1.2;}
+.veh-sub{font-size:12px;color:#64748b;font-weight:500;}
+.veh-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+.pill{background:#f1f5f9;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;color:#475569;}
+.body{padding:28px 32px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+.section-title{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;}
+.price-table{width:100%;border-collapse:collapse;}
+.price-table tr td{padding:9px 0;font-size:13px;border-bottom:1px solid #f1f5f9;}
+.price-table tr:last-child td{border-bottom:none;}
+.price-table .lbl{color:#475569;font-weight:500;}
+.price-table .amt{text-align:right;font-weight:600;color:#0f172a;}
+.price-table .otd td{padding-top:13px;font-size:15px;font-weight:800;color:#0f172a;border-top:2px solid #e2e8f0;border-bottom:none;}
+.price-table .down td{font-size:12px;color:#64748b;font-weight:500;}
+.price-table .fin td{font-size:14px;font-weight:700;color:#1877F2;}
+.payments-wrap{display:flex;flex-direction:column;gap:12px;}
+.apr-note{font-size:11px;color:#94a3b8;font-weight:500;text-align:center;}
+.sigs{padding:0 32px 28px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+.sig-line{border-top:1px solid #cbd5e1;padding-top:8px;font-size:11px;color:#94a3b8;font-weight:500;}
+.foot{background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;line-height:1.6;}
+</style>
+<div class="page">
+  <div class="hd">
+    <div class="hd-left"><h1>Grubbs INFINITI</h1><p>Pricing Worksheet</p></div>
+    <div class="hd-right"><div class="badge">Mock Pencil</div><div class="date">${dateStr}</div></div>
+  </div>
+  <div class="veh">
+    <div class="veh-img">${imgUrl ? `<img src="${imgUrl}" alt="${fullLabel}" crossorigin="anonymous"/>` : ''}</div>
+    <div class="veh-info">
+      <div class="veh-name">${fullLabel}</div>
+      <div class="veh-sub">Stock #${stock} &nbsp;·&nbsp; ${vin}${this.pencilCustomerName ? ' &nbsp;·&nbsp; ' + this.pencilCustomerName : ''}</div>
+      <div class="veh-meta">
+        ${mileage !== '—' ? `<span class="pill">${mileage}</span>` : ''}
+        ${color !== '—' ? `<span class="pill">${color}</span>` : ''}
+        ${v.condition ? `<span class="pill" style="text-transform:capitalize">${v.condition}</span>` : ''}
+      </div>
+    </div>
+  </div>
+  <div class="body">
+    <div>
+      <div class="section-title">Price Breakdown</div>
+      <table class="price-table">
+        <tr><td class="lbl">Internet Price</td><td class="amt">${fmt(basePrice)}</td></tr>
+        ${addendum > 0 ? `<tr><td class="lbl">${addendumLabel}</td><td class="amt">${fmt(addendum)}</td></tr>` : ''}
+        <tr><td class="lbl">${taxLabel} (${Number(this.mockPencil.taxRate||0).toFixed(2)}%)</td><td class="amt">${fmt(taxAmount)}</td></tr>
+        ${docFee > 0 ? `<tr><td class="lbl">${docFeeLabel}</td><td class="amt">${fmt(docFee)}</td></tr>` : ''}
+        <tr class="otd"><td>Out-the-Door</td><td style="text-align:right">${fmt(outTheDoor)}</td></tr>
+        ${downPayment > 0 ? `<tr class="down"><td>Down Payment</td><td style="text-align:right">− ${fmt(downPayment)}</td></tr>` : ''}
+        ${downPayment > 0 ? `<tr class="fin"><td>Amount Financed</td><td style="text-align:right">${fmt(amountFinanced)}</td></tr>` : ''}
+      </table>
+    </div>
+    <div class="payments-wrap">
+      <div class="section-title">Monthly Payment Options</div>
+      <table style="width:100%;border-collapse:separate;border-spacing:6px;">
+        <tr>${pmtCols}</tr>
+      </table>
+      <div class="apr-note">${Number(apr).toFixed(2)}% APR · Based on ${fmt(amountFinanced)} financed${downPayment > 0 ? ` · ${fmt(downPayment)} down` : ''}</div>
+    </div>
+  </div>
+  <div class="sigs">
+    <div><div class="sig-line">Customer Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>
+    <div><div class="sig-line">Sales Associate &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>
+  </div>
+  <div class="foot">This worksheet is an estimate only and does not constitute a contract or commitment. Pricing, taxes, fees, and payment amounts are subject to change and contingent upon credit approval, final tax and title calculations, lender participation, and vehicle availability at time of delivery. All payments based on the APR and term shown. Actual rate may vary based on credit profile.</div>
+</div>`
+
+      const container = document.createElement('div')
+      container.innerHTML = worksheetHTML
+      container.style.cssText = 'position:absolute;left:-9999px;top:0;width:820px;background:#f1f5f9;'
+      document.body.appendChild(container)
+
+      const filename = `pencil-${(stock !== 'N/A' ? stock : vin).replace(/[^a-z0-9-]/gi, '_')}.pdf`
+      try {
+        await html2pdf().from(container).set({
+          margin:     [8, 8, 8, 8],
+          filename,
+          image:      { type: 'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF:      { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        }).save()
+      } catch(e) {
+        alert('PDF generation failed. Try the browser print dialog instead (Ctrl+P).')
+      } finally {
+        document.body.removeChild(container)
+        this.pdfGenerating = false
+      }
     },
 
     downloadMockPencil(v) {

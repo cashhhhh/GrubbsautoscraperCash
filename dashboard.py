@@ -200,7 +200,10 @@ def api_get_settings(_: dict = Depends(_current_user)):
 
 
 class SettingsPayload(BaseModel):
-    addendum_amount: Optional[int] = None
+    addendum_amount:     Optional[int] = None
+    marketcheck_api_key: Optional[str] = None
+    dealer_zip:          Optional[str] = None
+    market_radius:       Optional[int] = None
 
 
 @app.post("/api/settings")
@@ -209,6 +212,12 @@ def api_save_settings(payload: SettingsPayload, _: dict = Depends(_current_user)
         if payload.addendum_amount < 0:
             raise HTTPException(400, "addendum_amount must be >= 0")
         db.set_setting("addendum_amount", str(payload.addendum_amount))
+    if payload.marketcheck_api_key is not None:
+        db.set_setting("marketcheck_api_key", payload.marketcheck_api_key.strip())
+    if payload.dealer_zip is not None:
+        db.set_setting("dealer_zip", payload.dealer_zip.strip())
+    if payload.market_radius is not None:
+        db.set_setting("market_radius", str(max(10, min(500, payload.market_radius))))
     return db.get_all_settings(_ENV_ADDENDUM)
 
 
@@ -309,6 +318,121 @@ def api_cox_import(payload: CoxImportPayload, _: dict = Depends(_current_user)):
         raise HTTPException(400, "No VINs found in report text — make sure you pasted the full Cox report")
     result = db.cox_import(records)
     return {**result, "parsed": len(records)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deals (saved pencil history)
+# ─────────────────────────────────────────────────────────────────────────────
+class SaveDealPayload(BaseModel):
+    vin:             str
+    customer_name:   str           = ""
+    base_price:      Optional[int] = None
+    addendum_amount: int           = 0
+    tax_rate:        float         = 0
+    doc_fee:         int           = 0
+    down_payment:    int           = 0
+    apr:             float         = 0
+    term_months:     int           = 72
+    out_the_door:    Optional[int] = None
+    amount_financed: Optional[int] = None
+    monthly_payment: Optional[float] = None
+    gross:           Optional[int] = None
+    notes:           str           = ""
+
+
+@app.post("/api/deals")
+def api_save_deal(payload: SaveDealPayload, user: dict = Depends(_current_user)):
+    deal_id = db.save_deal({**payload.dict(), "created_by": user["username"]})
+    return {"ok": True, "id": deal_id}
+
+
+@app.get("/api/deals")
+def api_get_deals(
+    vin:   str = Query(default=""),
+    limit: int = Query(default=50),
+    _: dict = Depends(_current_user),
+):
+    return {"deals": db.get_deals(vin=vin, limit=limit)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Market comps (MarketCheck API)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/api/market-comps/{vin}")
+def api_market_comps(vin: str = FPath(...), _: dict = Depends(_current_user)):
+    settings  = db.get_all_settings(_ENV_ADDENDUM)
+    api_key   = settings.get("marketcheck_api_key", "")
+    dealer_zip = settings.get("dealer_zip", "")
+    radius    = settings.get("market_radius", 150)
+
+    if not api_key:
+        raise HTTPException(400, "MarketCheck API key not configured — add it in Settings")
+    if not dealer_zip:
+        raise HTTPException(400, "Dealer ZIP not configured — add it in Settings")
+
+    rows = db.get_vehicles(search=vin, active_only=False)
+    if not rows:
+        raise HTTPException(404, f"VIN {vin} not found")
+    v = rows[0]
+
+    make  = v.get("make", "")
+    model = v.get("model", "")
+    our_price = v.get("price_override") if v.get("price_override") is not None else v.get("price_dollars")
+
+    if not make or not model:
+        raise HTTPException(400, "Vehicle is missing make/model data")
+
+    try:
+        resp = requests.get(
+            "https://mc-api.marketcheck.com/v2/search/car/active",
+            params={
+                "api_key": api_key,
+                "make":    make,
+                "model":   model,
+                "zip":     dealer_zip,
+                "radius":  radius,
+                "rows":    30,
+                "sort_by": "price",
+                "sort_order": "asc",
+                "fields":  "id,vin,heading,price,miles,exterior_color,trim,year,dealer.name,dealer.city,dealer.state,dom,vdp_url",
+            },
+            timeout=15,
+        )
+        data = resp.json()
+    except Exception as exc:
+        raise HTTPException(502, f"MarketCheck request failed: {exc}")
+
+    if "error" in data:
+        raise HTTPException(502, f"MarketCheck: {data['error'].get('message', 'Unknown error')}")
+
+    listings = data.get("listings", [])
+    enriched = []
+    for lst in listings:
+        price  = lst.get("price")
+        dealer = lst.get("dealer") or {}
+        enriched.append({
+            "vin":          lst.get("vin", ""),
+            "heading":      lst.get("heading", ""),
+            "price":        price,
+            "miles":        lst.get("miles"),
+            "trim":         lst.get("trim", ""),
+            "year":         lst.get("year"),
+            "exterior_color": lst.get("exterior_color", ""),
+            "dealer_name":  dealer.get("name", ""),
+            "dealer_city":  dealer.get("city", ""),
+            "dealer_state": dealer.get("state", ""),
+            "dom":          lst.get("dom"),
+            "vdp_url":      lst.get("vdp_url", ""),
+            "beats_us":     (price < our_price) if (price and our_price) else None,
+            "price_diff":   (price - our_price) if (price and our_price) else None,
+        })
+
+    return {
+        "listings":  enriched,
+        "count":     len(enriched),
+        "our_price": our_price,
+        "search":    {"make": make, "model": model, "zip": dealer_zip, "radius": radius},
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
