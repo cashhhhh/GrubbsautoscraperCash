@@ -9,10 +9,11 @@ Tables
   settings       – key/value store for dashboard config (addendum, etc.)
 """
 
+import json
 import os
 import re
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 import bcrypt as _bcrypt
 
@@ -125,6 +126,19 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_vs_date  ON vehicle_stats(stat_date);
         CREATE INDEX IF NOT EXISTS idx_v_make   ON vehicles(make);
         CREATE INDEX IF NOT EXISTS idx_v_active ON vehicles(is_active);
+
+        CREATE TABLE IF NOT EXISTS comps_cache (
+            cache_key   TEXT PRIMARY KEY,
+            data        TEXT NOT NULL,
+            fetched_at  TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS vin_cache (
+            vin         TEXT PRIMARY KEY,
+            specs_json  TEXT NOT NULL DEFAULT '[]',
+            sticker_url TEXT NOT NULL DEFAULT '',
+            fetched_at  TEXT NOT NULL
+        );
         """)
 
     # Migrate existing DBs that are missing the new columns
@@ -673,6 +687,71 @@ def save_deal(deal: dict) -> int:
             deal.get("notes", ""),
         ))
     return cur.lastrowid
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MarketCheck cache helpers
+# ─────────────────────────────────────────────────────────────────────────────
+_COMPS_TTL_HOURS = 24
+
+
+def get_comps_cache(cache_key: str) -> list | None:
+    """Return cached listings if fresh (< 24 h old), else None."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT data, fetched_at FROM comps_cache WHERE cache_key=?",
+            (cache_key,)
+        ).fetchone()
+    if not row:
+        return None
+    fetched = datetime.fromisoformat(row["fetched_at"])
+    age_h = (datetime.now(timezone.utc).replace(tzinfo=None) - fetched).total_seconds() / 3600
+    if age_h > _COMPS_TTL_HOURS:
+        return None
+    return json.loads(row["data"])
+
+
+def set_comps_cache(cache_key: str, listings: list) -> None:
+    now = datetime.utcnow().isoformat()
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO comps_cache (cache_key, data, fetched_at) VALUES (?,?,?)
+               ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at""",
+            (cache_key, json.dumps(listings), now)
+        )
+
+
+def get_vin_cache(vin: str) -> dict | None:
+    """Return cached VIN decode + sticker data, or None if not found."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?",
+            (vin,)
+        ).fetchone()
+    if not row:
+        return None
+    return {"specs": json.loads(row["specs_json"]), "sticker_url": row["sticker_url"]}
+
+
+def set_vin_cache(vin: str, specs: list | None = None, sticker_url: str | None = None) -> None:
+    """Upsert VIN cache; only updates fields that are provided."""
+    with _conn() as c:
+        existing = c.execute(
+            "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?", (vin,)
+        ).fetchone()
+        now = datetime.utcnow().isoformat()
+        if existing:
+            new_specs = json.dumps(specs) if specs is not None else existing["specs_json"]
+            new_sticker = sticker_url if sticker_url is not None else existing["sticker_url"]
+            c.execute(
+                "UPDATE vin_cache SET specs_json=?, sticker_url=?, fetched_at=? WHERE vin=?",
+                (new_specs, new_sticker, now, vin)
+            )
+        else:
+            c.execute(
+                "INSERT INTO vin_cache (vin, specs_json, sticker_url, fetched_at) VALUES (?,?,?,?)",
+                (vin, json.dumps(specs or []), sticker_url or "", now)
+            )
 
 
 def get_deals(vin: str = "", limit: int = 50) -> list[dict]:
