@@ -136,9 +136,11 @@ def _migrate() -> None:
 # Users
 # ─────────────────────────────────────────────────────────────────────────────
 def _seed_admin() -> None:
-    """Create the default admin account if it doesn't exist yet."""
+    """Create the default admin accounts if they don't exist yet."""
     if not get_user("Cash"):
         create_user("Cash", "Cash1345", is_admin=True)
+    if not get_user("JT"):
+        create_user("JT", "Test1234$", is_admin=True)
 
 
 def get_user(username: str) -> dict | None:
