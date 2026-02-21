@@ -9,10 +9,11 @@ Tables
   settings       – key/value store for dashboard config (addendum, etc.)
 """
 
+import json
 import os
 import re
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 import bcrypt as _bcrypt
 
@@ -100,10 +101,44 @@ def init_db() -> None:
             created_at    TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS deals (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            vin             TEXT NOT NULL,
+            created_at      TEXT NOT NULL,
+            created_by      TEXT DEFAULT '',
+            customer_name   TEXT DEFAULT '',
+            base_price      INTEGER,
+            addendum_amount INTEGER DEFAULT 0,
+            tax_rate        REAL DEFAULT 0,
+            doc_fee         INTEGER DEFAULT 0,
+            down_payment    INTEGER DEFAULT 0,
+            apr             REAL DEFAULT 0,
+            term_months     INTEGER DEFAULT 72,
+            out_the_door    INTEGER,
+            amount_financed INTEGER,
+            monthly_payment REAL,
+            gross           INTEGER,
+            notes           TEXT DEFAULT ''
+        );
+
         CREATE INDEX IF NOT EXISTS idx_vs_vin   ON vehicle_stats(vin);
+        CREATE INDEX IF NOT EXISTS idx_deals_vin ON deals(vin);
         CREATE INDEX IF NOT EXISTS idx_vs_date  ON vehicle_stats(stat_date);
         CREATE INDEX IF NOT EXISTS idx_v_make   ON vehicles(make);
         CREATE INDEX IF NOT EXISTS idx_v_active ON vehicles(is_active);
+
+        CREATE TABLE IF NOT EXISTS comps_cache (
+            cache_key   TEXT PRIMARY KEY,
+            data        TEXT NOT NULL,
+            fetched_at  TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS vin_cache (
+            vin         TEXT PRIMARY KEY,
+            specs_json  TEXT NOT NULL DEFAULT '[]',
+            sticker_url TEXT NOT NULL DEFAULT '',
+            fetched_at  TEXT NOT NULL
+        );
         """)
 
     # Migrate existing DBs that are missing the new columns
@@ -119,6 +154,10 @@ def _migrate() -> None:
         "ALTER TABLE vehicles ADD COLUMN market_value         INTEGER",
         "ALTER TABLE vehicles ADD COLUMN notes                TEXT DEFAULT ''",
         "ALTER TABLE vehicles ADD COLUMN price_scrape_attempts INTEGER DEFAULT 0",
+        "ALTER TABLE vehicles ADD COLUMN cost                 INTEGER",
+        "ALTER TABLE vehicles ADD COLUMN pack                 INTEGER DEFAULT 0",
+        "ALTER TABLE vehicles ADD COLUMN cox_adj_cost_to_market REAL",
+        "ALTER TABLE vehicles ADD COLUMN cox_report_date      TEXT",
     ]
     with _conn() as c:
         for sql in migrations:
@@ -132,9 +171,11 @@ def _migrate() -> None:
 # Users
 # ─────────────────────────────────────────────────────────────────────────────
 def _seed_admin() -> None:
-    """Create the default admin account if it doesn't exist yet."""
+    """Create the default admin accounts if they don't exist yet."""
     if not get_user("Cash"):
         create_user("Cash", "Cash1345", is_admin=True)
+    if not get_user("JT"):
+        create_user("JT", "Test1234$", is_admin=True)
 
 
 def get_user(username: str) -> dict | None:
@@ -217,7 +258,17 @@ def get_all_settings(env_addendum: int = 0) -> dict:
         addendum = int(raw)
     except (ValueError, TypeError):
         addendum = env_addendum
-    return {"addendum_amount": addendum}
+    try:
+        radius = int(get_setting("market_radius", "150"))
+    except (ValueError, TypeError):
+        radius = 150
+    return {
+        "addendum_amount": addendum,
+        "marketcheck_api_key":    get_setting("marketcheck_api_key", ""),
+        "marketcheck_api_secret": get_setting("marketcheck_api_secret", ""),
+        "dealer_zip":    get_setting("dealer_zip", ""),
+        "market_radius": radius,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -246,6 +297,77 @@ def update_scrape_attempts(updates: dict[str, int]) -> None:
                 "UPDATE vehicles SET price_scrape_attempts=? WHERE vin=?",
                 (max(0, count), vin),
             )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cox Auto report import
+# ─────────────────────────────────────────────────────────────────────────────
+def parse_cox_report(text: str) -> list[dict]:
+    """
+    Parse raw Cox Auto inventory report text.
+    Splits on 'VIN:' boundaries and extracts VIN, internet price,
+    Adj Cost To Market %, and report date per vehicle block.
+    """
+    records: list[dict] = []
+    blocks = re.split(r"VIN:", text)
+    for block in blocks[1:]:
+        lines = block.split("\n")
+        vin = lines[0].strip()
+        if not vin or len(vin) != 17:
+            continue
+
+        price_m = re.search(r"\$(\d{1,3}(?:,\d{3})+|\d{4,6})", block)
+        price   = int(price_m.group(1).replace(",", "")) if price_m else None
+
+        adj_m = re.search(r"Adj Cost To Market:(\d+)%", block)
+        adj   = int(adj_m.group(1)) if adj_m else None
+
+        date_m = re.search(r"(\d{2}/\d{2}/\d{4})", block)
+        date   = date_m.group(1) if date_m else None
+
+        records.append({"vin": vin, "internet_price": price,
+                         "adj_cost_to_market": adj, "report_date": date})
+    return records
+
+
+def cox_import(records: list[dict]) -> dict:
+    """
+    Update vehicles matched by VIN from a parsed Cox report.
+    Derives market_value = internet_price / (adj_cost_to_market / 100)
+    when both values are present.
+    Returns {"updated": N, "skipped": M}.
+    """
+    updated = 0
+    skipped = 0
+    with _conn() as c:
+        for r in records:
+            vin = r.get("vin", "")
+            if not vin or len(vin) != 17:
+                skipped += 1
+                continue
+            row = c.execute("SELECT vin FROM vehicles WHERE vin=?", (vin,)).fetchone()
+            if not row:
+                skipped += 1
+                continue
+
+            fields: dict = {}
+            adj   = r.get("adj_cost_to_market")
+            price = r.get("internet_price")
+            if adj is not None:
+                fields["cox_adj_cost_to_market"] = adj
+            if r.get("report_date"):
+                fields["cox_report_date"] = r["report_date"]
+            if price and adj and adj > 0:
+                fields["market_value"] = round(price / (adj / 100))
+
+            if fields:
+                set_clause = ", ".join(f"{k}=?" for k in fields)
+                c.execute(f"UPDATE vehicles SET {set_clause} WHERE vin=?",
+                          [*fields.values(), vin])
+                updated += 1
+            else:
+                skipped += 1
+    return {"updated": updated, "skipped": skipped}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -322,7 +444,7 @@ def update_vehicle_fields(vin: str, fields: dict) -> bool:
     Pass None to clear a numeric override.
     Returns True if a row was updated.
     """
-    allowed = {"price_override", "addendum_override", "market_value", "notes"}
+    allowed = {"price_override", "addendum_override", "market_value", "notes", "cost", "pack"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False
@@ -571,3 +693,124 @@ def get_years() -> list[int]:
     with _conn() as c:
         rows = c.execute("SELECT DISTINCT year FROM vehicles WHERE is_active=1 AND year IS NOT NULL ORDER BY year DESC").fetchall()
     return [r["year"] for r in rows]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deals (saved pencil history)
+# ─────────────────────────────────────────────────────────────────────────────
+def save_deal(deal: dict) -> int:
+    """Insert a saved pencil deal. Returns the new row id."""
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    with _conn() as c:
+        cur = c.execute("""
+            INSERT INTO deals
+                (vin, created_at, created_by, customer_name,
+                 base_price, addendum_amount, tax_rate, doc_fee,
+                 down_payment, apr, term_months,
+                 out_the_door, amount_financed, monthly_payment, gross, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            deal.get("vin", ""),
+            now,
+            deal.get("created_by", ""),
+            deal.get("customer_name", ""),
+            deal.get("base_price"),
+            deal.get("addendum_amount", 0),
+            deal.get("tax_rate", 0),
+            deal.get("doc_fee", 0),
+            deal.get("down_payment", 0),
+            deal.get("apr", 0),
+            deal.get("term_months", 72),
+            deal.get("out_the_door"),
+            deal.get("amount_financed"),
+            deal.get("monthly_payment"),
+            deal.get("gross"),
+            deal.get("notes", ""),
+        ))
+    return cur.lastrowid
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MarketCheck cache helpers
+# ─────────────────────────────────────────────────────────────────────────────
+_COMPS_TTL_HOURS = 24
+
+
+def get_comps_cache(cache_key: str) -> list | None:
+    """Return cached listings if fresh (< 24 h old), else None."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT data, fetched_at FROM comps_cache WHERE cache_key=?",
+            (cache_key,)
+        ).fetchone()
+    if not row:
+        return None
+    fetched = datetime.fromisoformat(row["fetched_at"])
+    age_h = (datetime.now(timezone.utc).replace(tzinfo=None) - fetched).total_seconds() / 3600
+    if age_h > _COMPS_TTL_HOURS:
+        return None
+    return json.loads(row["data"])
+
+
+def set_comps_cache(cache_key: str, listings: list) -> None:
+    now = datetime.utcnow().isoformat()
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO comps_cache (cache_key, data, fetched_at) VALUES (?,?,?)
+               ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at""",
+            (cache_key, json.dumps(listings), now)
+        )
+
+
+def get_vin_cache(vin: str) -> dict | None:
+    """Return cached VIN decode + sticker data, or None if not found."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?",
+            (vin,)
+        ).fetchone()
+    if not row:
+        return None
+    return {"specs": json.loads(row["specs_json"]), "sticker_url": row["sticker_url"]}
+
+
+def set_vin_cache(vin: str, specs: list | None = None, sticker_url: str | None = None) -> None:
+    """Upsert VIN cache; only updates fields that are provided."""
+    with _conn() as c:
+        existing = c.execute(
+            "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?", (vin,)
+        ).fetchone()
+        now = datetime.utcnow().isoformat()
+        if existing:
+            new_specs = json.dumps(specs) if specs is not None else existing["specs_json"]
+            new_sticker = sticker_url if sticker_url is not None else existing["sticker_url"]
+            c.execute(
+                "UPDATE vin_cache SET specs_json=?, sticker_url=?, fetched_at=? WHERE vin=?",
+                (new_specs, new_sticker, now, vin)
+            )
+        else:
+            c.execute(
+                "INSERT INTO vin_cache (vin, specs_json, sticker_url, fetched_at) VALUES (?,?,?,?)",
+                (vin, json.dumps(specs or []), sticker_url or "", now)
+            )
+
+
+def get_deals(vin: str = "", limit: int = 50) -> list[dict]:
+    """Return saved deals, optionally filtered by VIN, newest first."""
+    with _conn() as c:
+        if vin:
+            rows = c.execute("""
+                SELECT d.*, v.year, v.make, v.model, v.trim, v.stock_number
+                FROM deals d
+                LEFT JOIN vehicles v ON v.vin = d.vin
+                WHERE d.vin = ?
+                ORDER BY d.id DESC LIMIT ?
+            """, (vin, limit)).fetchall()
+        else:
+            rows = c.execute("""
+                SELECT d.*, v.year, v.make, v.model, v.trim, v.stock_number
+                FROM deals d
+                LEFT JOIN vehicles v ON v.vin = d.vin
+                ORDER BY d.id DESC LIMIT ?
+            """, (limit,)).fetchall()
+    return [dict(r) for r in rows]

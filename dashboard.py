@@ -7,6 +7,7 @@ Start:
     DASHBOARD_PORT=9000 python dashboard.py
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -222,7 +223,11 @@ def api_get_settings(_: dict = Depends(_current_user)):
 
 
 class SettingsPayload(BaseModel):
-    addendum_amount: Optional[int] = None
+    addendum_amount:          Optional[int] = None
+    marketcheck_api_key:      Optional[str] = None
+    marketcheck_api_secret:   Optional[str] = None
+    dealer_zip:               Optional[str] = None
+    market_radius:            Optional[int] = None
 
 
 @app.post("/api/settings")
@@ -231,6 +236,14 @@ def api_save_settings(payload: SettingsPayload, _: dict = Depends(_current_user)
         if payload.addendum_amount < 0:
             raise HTTPException(400, "addendum_amount must be >= 0")
         db.set_setting("addendum_amount", str(payload.addendum_amount))
+    if payload.marketcheck_api_key is not None:
+        db.set_setting("marketcheck_api_key", payload.marketcheck_api_key.strip())
+    if payload.marketcheck_api_secret is not None:
+        db.set_setting("marketcheck_api_secret", payload.marketcheck_api_secret.strip())
+    if payload.dealer_zip is not None:
+        db.set_setting("dealer_zip", payload.dealer_zip.strip())
+    if payload.market_radius is not None:
+        db.set_setting("market_radius", str(max(10, min(500, payload.market_radius))))
     return db.get_all_settings(_ENV_ADDENDUM)
 
 
@@ -357,6 +370,230 @@ def api_weekly_digest(_: dict = Depends(_current_user)):
     return {"ok": True, "digest": digest}
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cox Auto report import
+# ─────────────────────────────────────────────────────────────────────────────
+class CoxImportPayload(BaseModel):
+    raw_text: str
+
+
+@app.post("/api/cox-import")
+def api_cox_import(payload: CoxImportPayload, _: dict = Depends(_current_user)):
+    if not payload.raw_text.strip():
+        raise HTTPException(400, "raw_text is empty")
+    records = db.parse_cox_report(payload.raw_text)
+    if not records:
+        raise HTTPException(400, "No VINs found in report text — make sure you pasted the full Cox report")
+    result = db.cox_import(records)
+    return {**result, "parsed": len(records)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deals (saved pencil history)
+# ─────────────────────────────────────────────────────────────────────────────
+class SaveDealPayload(BaseModel):
+    vin:             str
+    customer_name:   str           = ""
+    base_price:      Optional[int] = None
+    addendum_amount: int           = 0
+    tax_rate:        float         = 0
+    doc_fee:         int           = 0
+    down_payment:    int           = 0
+    apr:             float         = 0
+    term_months:     int           = 72
+    out_the_door:    Optional[int] = None
+    amount_financed: Optional[int] = None
+    monthly_payment: Optional[float] = None
+    gross:           Optional[int] = None
+    notes:           str           = ""
+
+
+@app.post("/api/deals")
+def api_save_deal(payload: SaveDealPayload, user: dict = Depends(_current_user)):
+    deal_id = db.save_deal({**payload.dict(), "created_by": user["username"]})
+    return {"ok": True, "id": deal_id}
+
+
+@app.get("/api/deals")
+def api_get_deals(
+    vin:   str = Query(default=""),
+    limit: int = Query(default=50),
+    _: dict = Depends(_current_user),
+):
+    return {"deals": db.get_deals(vin=vin, limit=limit)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Market comps (MarketCheck API)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/api/market-comps/{vin}")
+def api_market_comps(vin: str = FPath(...), _: dict = Depends(_current_user)):
+    settings  = db.get_all_settings(_ENV_ADDENDUM)
+    api_key   = settings.get("marketcheck_api_key", "")
+    dealer_zip = settings.get("dealer_zip", "")
+    radius    = settings.get("market_radius", 150)
+
+    if not api_key:
+        raise HTTPException(400, "MarketCheck API key not configured — add it in Settings")
+    if not dealer_zip:
+        raise HTTPException(400, "Dealer ZIP not configured — add it in Settings")
+
+    rows = db.get_vehicles(search=vin, active_only=False)
+    if not rows:
+        raise HTTPException(404, f"VIN {vin} not found")
+    v = rows[0]
+
+    make  = v.get("make", "")
+    model = v.get("model", "")
+    our_price = v.get("price_override") if v.get("price_override") is not None else v.get("price_dollars")
+
+    if not make or not model:
+        raise HTTPException(400, "Vehicle is missing make/model data")
+
+    # ── Cache check (same make/model/zip/radius share one daily call) ─────────
+    cache_key = f"{make.lower()}|{model.lower()}|{dealer_zip}|{radius}"
+    cached = db.get_comps_cache(cache_key)
+    if cached is not None:
+        # Re-compute price diffs against this vehicle's current price
+        for c in cached:
+            p = c.get("price")
+            c["beats_us"]   = (p < our_price) if (p and our_price) else None
+            c["price_diff"] = (p - our_price) if (p and our_price) else None
+        return {
+            "listings":  cached,
+            "count":     len(cached),
+            "our_price": our_price,
+            "cached":    True,
+            "search":    {"make": make, "model": model, "zip": dealer_zip, "radius": radius},
+        }
+
+    try:
+        resp = requests.get(
+            "https://api.marketcheck.com/v2/search/car/active",
+            params={
+                "api_key":    api_key,
+                "make":       make,
+                "model":      model,
+                "car_type":   "used",
+                "zip":        dealer_zip,
+                "radius":     radius,
+                "rows":       30,
+                "sort_by":    "price",
+                "sort_order": "asc",
+            },
+            timeout=15,
+        )
+        data = resp.json()
+    except Exception as exc:
+        raise HTTPException(502, f"MarketCheck request failed: {exc}")
+
+    if resp.status_code != 200:
+        msg = data.get("message") or data.get("error", {}).get("message", "") or resp.text[:200]
+        raise HTTPException(502, f"MarketCheck ({resp.status_code}): {msg}")
+
+    if "error" in data:
+        raise HTTPException(502, f"MarketCheck: {data['error'].get('message', 'Unknown error')}")
+
+    listings = data.get("listings", [])
+    enriched = []
+    for lst in listings:
+        price  = lst.get("price")
+        dealer = lst.get("dealer") or {}
+        enriched.append({
+            "vin":            lst.get("vin", ""),
+            "heading":        lst.get("heading", ""),
+            "price":          price,
+            "miles":          lst.get("miles"),
+            "trim":           lst.get("trim", ""),
+            "year":           lst.get("year"),
+            "exterior_color": lst.get("exterior_color", ""),
+            "dealer_name":    dealer.get("name", ""),
+            "dealer_city":    dealer.get("city", ""),
+            "dealer_state":   dealer.get("state", ""),
+            "dom":            lst.get("dom"),
+            "vdp_url":        lst.get("vdp_url", ""),
+            "beats_us":       (price < our_price) if (price and our_price) else None,
+            "price_diff":     (price - our_price) if (price and our_price) else None,
+        })
+
+    db.set_comps_cache(cache_key, enriched)
+
+    return {
+        "listings":  enriched,
+        "count":     len(enriched),
+        "our_price": our_price,
+        "cached":    False,
+        "search":    {"make": make, "model": model, "zip": dealer_zip, "radius": radius},
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VIN Decode  (MarketCheck — cached permanently)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/api/vin-decode/{vin}")
+def api_vin_decode(vin: str = FPath(...), _: dict = Depends(_current_user)):
+    cached = db.get_vin_cache(vin)
+    if cached and cached["specs"]:
+        return {"specs": cached["specs"], "cached": True}
+
+    settings = db.get_all_settings(_ENV_ADDENDUM)
+    api_key  = settings.get("marketcheck_api_key", "")
+    if not api_key:
+        raise HTTPException(400, "MarketCheck API key not configured — add it in Settings")
+
+    try:
+        resp = requests.get(
+            f"https://api.marketcheck.com/v2/decode/car/{vin}/specs",
+            params={"api_key": api_key},
+            timeout=15,
+        )
+        data = resp.json()
+    except Exception as exc:
+        raise HTTPException(502, f"MarketCheck VIN decode failed: {exc}")
+
+    if resp.status_code != 200:
+        msg = data.get("message") or data.get("error", {}).get("message", "") or resp.text[:200]
+        raise HTTPException(502, f"MarketCheck ({resp.status_code}): {msg}")
+
+    specs = data if isinstance(data, list) else data.get("specs", [])
+    db.set_vin_cache(vin, specs=specs)
+    return {"specs": specs, "cached": False}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Window Sticker  (MarketCheck — cached permanently)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/api/window-sticker/{vin}")
+def api_window_sticker(vin: str = FPath(...), _: dict = Depends(_current_user)):
+    cached = db.get_vin_cache(vin)
+    if cached and cached["sticker_url"]:
+        return {"sticker_url": cached["sticker_url"], "cached": True}
+
+    settings = db.get_all_settings(_ENV_ADDENDUM)
+    api_key  = settings.get("marketcheck_api_key", "")
+    if not api_key:
+        raise HTTPException(400, "MarketCheck API key not configured — add it in Settings")
+
+    try:
+        resp = requests.get(
+            f"https://api.marketcheck.com/v2/sticker/car/{vin}",
+            params={"api_key": api_key},
+            timeout=15,
+        )
+        data = resp.json()
+    except Exception as exc:
+        raise HTTPException(502, f"MarketCheck sticker request failed: {exc}")
+
+    if resp.status_code != 200:
+        msg = data.get("message") or data.get("error", {}).get("message", "") or resp.text[:200]
+        raise HTTPException(502, f"MarketCheck ({resp.status_code}): {msg}")
+
+    sticker_url = data.get("url") or data.get("sticker_url", "")
+    if sticker_url:
+        db.set_vin_cache(vin, sticker_url=sticker_url)
+    return {"sticker_url": sticker_url, "cached": False}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
