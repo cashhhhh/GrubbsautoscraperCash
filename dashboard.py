@@ -96,26 +96,23 @@ def _enrich_vehicle(v: dict, addendum: int) -> dict:
     else:
         v["pct_to_market"] = None
 
+    # Days on lot (timezone-aware)
+    try:
+        from datetime import timezone as _tz
+        fs = datetime.fromisoformat(v.get("first_seen", ""))
+        if fs.tzinfo is None:
+            fs = fs.replace(tzinfo=_tz.utc)
+        v["days_on_lot"] = max(0, (datetime.now(_tz.utc) - fs).days)
+    except Exception:
+        v["days_on_lot"] = 0
+
     # Inventory intelligence flags
     body = (v.get("body_style") or "").lower()
-    text_blob = " ".join([
-        str(v.get("title") or ""),
-        str(v.get("trim") or ""),
-        str(v.get("model") or ""),
-    ]).lower()
+    text_blob = " ".join([str(v.get("title") or ""), str(v.get("trim") or ""), str(v.get("model") or "")]).lower()
     three_row_terms = ("3rd row", "third row", "7-pass", "7 pass", "8-pass", "captain chairs", "3-row")
     v["is_three_row_suv"] = ("suv" in body) and any(t in text_blob for t in three_row_terms)
 
-    first_seen = v.get("first_seen")
-    dol = 0
-    if first_seen:
-        try:
-            dol = max(0, (datetime.utcnow() - datetime.fromisoformat(first_seen)).days)
-        except ValueError:
-            dol = 0
-    v["days_on_lot"] = dol
-
-    # Price war detector: undercut when market value benchmark beats our current effective price.
+    # Price war: we're priced above market value
     v["price_war_alert"] = bool(ep and mv and mv > 0 and ep > mv)
 
     return v
@@ -228,6 +225,11 @@ class SettingsPayload(BaseModel):
     marketcheck_api_secret:   Optional[str] = None
     dealer_zip:               Optional[str] = None
     market_radius:            Optional[int] = None
+    smtp_host:                Optional[str] = None
+    smtp_port:                Optional[int] = None
+    smtp_user:                Optional[str] = None
+    smtp_pass:                Optional[str] = None
+    digest_email:             Optional[str] = None
 
 
 @app.post("/api/settings")
@@ -244,7 +246,131 @@ def api_save_settings(payload: SettingsPayload, _: dict = Depends(_current_user)
         db.set_setting("dealer_zip", payload.dealer_zip.strip())
     if payload.market_radius is not None:
         db.set_setting("market_radius", str(max(10, min(500, payload.market_radius))))
+    if payload.smtp_host is not None:
+        db.set_setting("smtp_host", payload.smtp_host.strip())
+    if payload.smtp_port is not None:
+        db.set_setting("smtp_port", str(max(1, min(65535, payload.smtp_port))))
+    if payload.smtp_user is not None:
+        db.set_setting("smtp_user", payload.smtp_user.strip())
+    if payload.smtp_pass is not None:
+        db.set_setting("smtp_pass", payload.smtp_pass)
+    if payload.digest_email is not None:
+        db.set_setting("digest_email", payload.digest_email.strip())
     return db.get_all_settings(_ENV_ADDENDUM)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Weekly Email Digest
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/api/send-digest")
+def api_send_digest(_: dict = Depends(_current_user)):
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    s = db.get_all_settings(_ENV_ADDENDUM)
+    smtp_host    = s.get("smtp_host", "").strip()
+    smtp_port    = int(s.get("smtp_port") or 587)
+    smtp_user    = s.get("smtp_user", "").strip()
+    smtp_pass    = s.get("smtp_pass", "")
+    digest_email = s.get("digest_email", "").strip()
+
+    if not smtp_host or not smtp_user or not digest_email:
+        raise HTTPException(400, "Configure SMTP host, username, and recipient email in Settings first.")
+
+    addendum = _effective_addendum()
+    vehicles = db.get_vehicles(active_only=True)
+    enriched = [_enrich_vehicle(v, addendum) for v in vehicles]
+
+    total     = len(enriched)
+    priced    = sum(1 for v in enriched if v.get("price_ok"))
+    top_fb    = sorted(enriched, key=lambda v: v.get("fb_clicks", 0), reverse=True)[:5]
+    aging     = [v for v in enriched if v.get("days_on_lot", 0) >= 60]
+    aging     = sorted(aging, key=lambda v: v.get("days_on_lot", 0), reverse=True)[:10]
+    no_price  = [v for v in enriched if not v.get("price_ok")]
+    avg_price = (sum(v["effective_price"] for v in enriched if v.get("price_ok")) // priced) if priced else 0
+
+    def veh_name(v):
+        return f"{v.get('year','')} {v.get('make','')} {v.get('model','')}".strip()
+
+    def money(n):
+        return f"${n:,.0f}" if n else "—"
+
+    rows_top = "".join(
+        f"<tr><td>{veh_name(v)}</td><td style='text-align:right'>{v.get('fb_clicks',0)}</td>"
+        f"<td style='text-align:right'>{v.get('fb_impressions',0):,}</td>"
+        f"<td style='text-align:right'>{money(v.get('effective_price'))}</td></tr>"
+        for v in top_fb
+    )
+    rows_aging = "".join(
+        f"<tr><td>{veh_name(v)}</td><td style='text-align:right;color:#dc2626'>{v.get('days_on_lot',0)} days</td>"
+        f"<td style='text-align:right'>{money(v.get('effective_price'))}</td>"
+        f"<td style='text-align:right'>{v.get('stock_number','—')}</td></tr>"
+        for v in aging
+    ) or "<tr><td colspan='4' style='color:#6b7280'>None — great job!</td></tr>"
+
+    date_str = datetime.utcnow().strftime("%B %d, %Y")
+    html_body = f"""
+<!doctype html><html><head><meta charset="utf-8"/>
+<style>
+body{{font-family:Arial,sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:0}}
+.wrap{{max-width:640px;margin:24px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)}}
+.hd{{background:#0f172a;padding:24px 28px;color:#fff}}
+.hd h1{{margin:0;font-size:20px;font-weight:800}}
+.hd p{{margin:4px 0 0;font-size:12px;color:#94a3b8}}
+.stats{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:20px 28px}}
+.stat{{background:#f8fafc;border-radius:8px;padding:14px;text-align:center}}
+.stat .n{{font-size:28px;font-weight:800;color:#1877F2}}
+.stat .l{{font-size:11px;color:#64748b;text-transform:uppercase;font-weight:600;margin-top:2px}}
+.section{{padding:0 28px 20px}}
+.section h2{{font-size:14px;font-weight:700;color:#0f172a;margin:0 0 10px;border-bottom:1px solid #e2e8f0;padding-bottom:8px}}
+table{{width:100%;border-collapse:collapse;font-size:13px}}
+th{{text-align:left;font-weight:600;color:#64748b;padding:6px 0;font-size:11px;text-transform:uppercase}}
+td{{padding:7px 0;border-bottom:1px solid #f1f5f9;vertical-align:top}}
+.foot{{padding:16px 28px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #f1f5f9}}
+</style></head><body>
+<div class="wrap">
+  <div class="hd"><h1>Grubbs INFINITI — Weekly Digest</h1><p>{date_str}</p></div>
+  <div class="stats">
+    <div class="stat"><div class="n">{total}</div><div class="l">Active</div></div>
+    <div class="stat"><div class="n">{priced}</div><div class="l">Priced</div></div>
+    <div class="stat"><div class="n">{money(avg_price)}</div><div class="l">Avg Price</div></div>
+  </div>
+  <div class="section">
+    <h2>🔥 Top FB Performers (Clicks)</h2>
+    <table>
+      <tr><th>Vehicle</th><th style="text-align:right">Clicks</th><th style="text-align:right">Views</th><th style="text-align:right">Price</th></tr>
+      {rows_top}
+    </table>
+  </div>
+  <div class="section">
+    <h2>⏰ Aging Units (60+ Days)</h2>
+    <table>
+      <tr><th>Vehicle</th><th style="text-align:right">Days</th><th style="text-align:right">Price</th><th style="text-align:right">Stock</th></tr>
+      {rows_aging}
+    </table>
+  </div>
+  {'<div class="section"><h2>⚠️ No Price Set</h2><p style="font-size:13px;color:#64748b">' + ", ".join(veh_name(v) for v in no_price[:10]) + ('…' if len(no_price) > 10 else '') + '</p></div>' if no_price else ''}
+  <div class="foot">Sent from Grubbs INFINITI FB Marketplace Dashboard · {date_str}</div>
+</div></body></html>"""
+
+    recipients = [e.strip() for e in digest_email.split(",") if e.strip()]
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"Weekly Inventory Digest — {date_str}"
+    msg["From"]    = smtp_user
+    msg["To"]      = ", ".join(recipients)
+    msg.attach(MIMEText(html_body, "html"))
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, recipients, msg.as_string())
+    except Exception as exc:
+        raise HTTPException(500, f"SMTP error: {exc}")
+
+    return {"message": f"Digest sent to {', '.join(recipients)}"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -258,13 +384,14 @@ def api_vehicles(
     year:        str  = Query(default=""),
     search:      str  = Query(default=""),
     active_only: bool = Query(default=True),
-    three_row_only: bool = Query(default=False),
+    three_row:   bool = Query(default=False),
     _: dict = Depends(_current_user),
 ):
     addendum = _effective_addendum()
     vehicles = db.get_vehicles(
         make=make, condition=condition, body_style=body_style,
-        year=year, search=search, active_only=active_only, three_row_only=three_row_only,
+        year=year, search=search, active_only=active_only,
+        three_row=three_row,
     )
     return {"vehicles": [_enrich_vehicle(v, addendum) for v in vehicles],
             "count": len(vehicles),

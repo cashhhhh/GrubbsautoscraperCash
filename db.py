@@ -262,12 +262,21 @@ def get_all_settings(env_addendum: int = 0) -> dict:
         radius = int(get_setting("market_radius", "150"))
     except (ValueError, TypeError):
         radius = 150
+    try:
+        smtp_port = int(get_setting("smtp_port", "587"))
+    except (ValueError, TypeError):
+        smtp_port = 587
     return {
         "addendum_amount": addendum,
         "marketcheck_api_key":    get_setting("marketcheck_api_key", ""),
         "marketcheck_api_secret": get_setting("marketcheck_api_secret", ""),
         "dealer_zip":    get_setting("dealer_zip", ""),
         "market_radius": radius,
+        "smtp_host":     get_setting("smtp_host", ""),
+        "smtp_port":     smtp_port,
+        "smtp_user":     get_setting("smtp_user", ""),
+        "smtp_pass":     get_setting("smtp_pass", ""),
+        "digest_email":  get_setting("digest_email", ""),
     }
 
 
@@ -494,6 +503,30 @@ def upsert_vehicle_stats(stats: list[dict]) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Queries
 # ─────────────────────────────────────────────────────────────────────────────
+_THREE_ROW_MODELS = [
+    "QX80", "QX60", "Armada", "Pathfinder",
+    "Traverse", "Tahoe", "Suburban", "Yukon", "Acadia",
+    "Explorer", "Expedition", "Navigator", "Aviator",
+    "Sequoia", "Highlander", "Land Cruiser",
+    "GX", "LX", "TX",
+    "Pilot",
+    "MDX",
+    "Telluride", "Sorento",
+    "Palisade", "Santa Fe",
+    "Atlas",
+    "Ascent",
+    "Enclave",
+    "Escalade", "XT6",
+    "Pacifica", "Voyager",
+    "Durango",
+    "Wagoneer", "Grand Wagoneer",
+    "GLS",
+    "X7",
+    "Q7",
+    "XC90",
+]
+
+
 def get_vehicles(
     make: str = "",
     condition: str = "",
@@ -501,7 +534,7 @@ def get_vehicles(
     year: str = "",
     search: str = "",
     active_only: bool = True,
-    three_row_only: bool = False,
+    three_row: bool = False,
 ) -> list[dict]:
     filters: list[str] = []
     params:  list      = []
@@ -527,9 +560,10 @@ def get_vehicles(
         filters.append("(v.title LIKE ? OR v.vin LIKE ? OR v.stock_number LIKE ? OR v.model LIKE ?)")
         s = f"%{search}%"
         params.extend([s, s, s, s])
-    if three_row_only:
-        filters.append("LOWER(v.body_style) LIKE '%suv%'")
-        filters.append("(LOWER(v.title) LIKE '%3rd row%' OR LOWER(v.title) LIKE '%third row%' OR LOWER(v.title) LIKE '%7-pass%' OR LOWER(v.title) LIKE '%8-pass%' OR LOWER(v.title) LIKE '%3-row%' OR LOWER(v.trim) LIKE '%3rd row%' OR LOWER(v.trim) LIKE '%third row%' OR LOWER(v.trim) LIKE '%7-pass%' OR LOWER(v.trim) LIKE '%8-pass%' OR LOWER(v.trim) LIKE '%3-row%')")
+    if three_row:
+        placeholders = ",".join(["?"] * len(_THREE_ROW_MODELS))
+        filters.append(f"UPPER(v.model) IN ({placeholders})")
+        params.extend(m.upper() for m in _THREE_ROW_MODELS)
 
     where = "WHERE " + " AND ".join(filters) if filters else ""
 
