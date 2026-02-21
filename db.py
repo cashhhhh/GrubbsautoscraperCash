@@ -250,8 +250,9 @@ def get_all_settings(env_addendum: int = 0) -> dict:
         radius = 150
     return {
         "addendum_amount": addendum,
-        "marketcheck_api_key": get_setting("marketcheck_api_key", ""),
-        "dealer_zip": get_setting("dealer_zip", ""),
+        "marketcheck_api_key":    get_setting("marketcheck_api_key", ""),
+        "marketcheck_api_secret": get_setting("marketcheck_api_secret", ""),
+        "dealer_zip":    get_setting("dealer_zip", ""),
         "market_radius": radius,
     }
 

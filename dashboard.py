@@ -200,10 +200,11 @@ def api_get_settings(_: dict = Depends(_current_user)):
 
 
 class SettingsPayload(BaseModel):
-    addendum_amount:     Optional[int] = None
-    marketcheck_api_key: Optional[str] = None
-    dealer_zip:          Optional[str] = None
-    market_radius:       Optional[int] = None
+    addendum_amount:          Optional[int] = None
+    marketcheck_api_key:      Optional[str] = None
+    marketcheck_api_secret:   Optional[str] = None
+    dealer_zip:               Optional[str] = None
+    market_radius:            Optional[int] = None
 
 
 @app.post("/api/settings")
@@ -214,6 +215,8 @@ def api_save_settings(payload: SettingsPayload, _: dict = Depends(_current_user)
         db.set_setting("addendum_amount", str(payload.addendum_amount))
     if payload.marketcheck_api_key is not None:
         db.set_setting("marketcheck_api_key", payload.marketcheck_api_key.strip())
+    if payload.marketcheck_api_secret is not None:
+        db.set_setting("marketcheck_api_secret", payload.marketcheck_api_secret.strip())
     if payload.dealer_zip is not None:
         db.set_setting("dealer_zip", payload.dealer_zip.strip())
     if payload.market_radius is not None:
@@ -384,23 +387,28 @@ def api_market_comps(vin: str = FPath(...), _: dict = Depends(_current_user)):
 
     try:
         resp = requests.get(
-            "https://mc-api.marketcheck.com/v2/search/car/active",
+            "https://api.marketcheck.com/v2/search/car/active",
             params={
-                "api_key": api_key,
-                "make":    make,
-                "model":   model,
-                "zip":     dealer_zip,
-                "radius":  radius,
-                "rows":    30,
-                "sort_by": "price",
+                "api_key":    api_key,
+                "make":       make,
+                "model":      model,
+                "car_type":   "used",
+                "zip":        dealer_zip,
+                "radius":     radius,
+                "rows":       30,
+                "sort_by":    "price",
                 "sort_order": "asc",
-                "fields":  "id,vin,heading,price,miles,exterior_color,trim,year,dealer.name,dealer.city,dealer.state,dom,vdp_url",
             },
             timeout=15,
         )
         data = resp.json()
     except Exception as exc:
         raise HTTPException(502, f"MarketCheck request failed: {exc}")
+
+    # Surface any API-level errors with the raw message
+    if resp.status_code != 200:
+        msg = data.get("message") or data.get("error", {}).get("message", "") or resp.text[:200]
+        raise HTTPException(502, f"MarketCheck ({resp.status_code}): {msg}")
 
     if "error" in data:
         raise HTTPException(502, f"MarketCheck: {data['error'].get('message', 'Unknown error')}")

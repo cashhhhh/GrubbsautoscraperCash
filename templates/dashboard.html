@@ -1309,8 +1309,13 @@
       <!-- MarketCheck Integration -->
       <div class="border-t border-slate-100 pt-5">
         <label class="block text-sm font-semibold text-slate-700 mb-1">MarketCheck API Key</label>
-        <p class="text-xs text-slate-400 mb-2">Powers the "Market" tab — shows live competitor prices near you. Get a free key at <span class="text-fb">marketcheck.com</span>.</p>
-        <input type="text" x-model="settings.marketcheck_api_key" placeholder="mc_api_key_..."
+        <p class="text-xs text-slate-400 mb-2">Powers the "Market" tab — live competitor prices near you.</p>
+        <input type="text" x-model="settings.marketcheck_api_key" placeholder="e.g. xb7HUvJb…"
+          class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb font-mono" />
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">MarketCheck API Secret</label>
+        <input type="password" x-model="settings.marketcheck_api_secret" placeholder="e.g. zDgvfKPa…"
           class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb font-mono" />
       </div>
       <div>
@@ -1368,7 +1373,7 @@ function dashboard() {
     isAdmin: false,
     // settings modal
     settingsOpen: false,
-    settings: { addendum_amount: 0, marketcheck_api_key: '', dealer_zip: '', market_radius: 150 },
+    settings: { addendum_amount: 0, marketcheck_api_key: '', marketcheck_api_secret: '', dealer_zip: '', market_radius: 150 },
     savingSettings: false,
     settingsSaveMsg: '',
     // vehicle edit
@@ -1528,10 +1533,11 @@ function dashboard() {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
-          addendum_amount:     parseInt(this.settings.addendum_amount) || 0,
-          marketcheck_api_key: this.settings.marketcheck_api_key || '',
-          dealer_zip:          this.settings.dealer_zip || '',
-          market_radius:       parseInt(this.settings.market_radius) || 150,
+          addendum_amount:          parseInt(this.settings.addendum_amount) || 0,
+          marketcheck_api_key:      this.settings.marketcheck_api_key || '',
+          marketcheck_api_secret:   this.settings.marketcheck_api_secret || '',
+          dealer_zip:               this.settings.dealer_zip || '',
+          market_radius:            parseInt(this.settings.market_radius) || 150,
         })
       })
       const d = await r.json()
