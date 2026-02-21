@@ -87,6 +87,14 @@
         <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
         Sync History
       </div>
+      <div class="nav-item" :class="tab==='deal_history'&&'active'" @click="tab='deal_history';loadDealHistory()">
+        <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 20 20"><path d="M4 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V7.414a1 1 0 00-.293-.707l-3.414-3.414A1 1 0 0012.586 3H4zm7 1.414L15.586 9H11V4.414z"/></svg>
+        Deal History
+      </div>
+      <div class="nav-item" :class="tab==='lot_walk'&&'active'" @click="tab='lot_walk'">
+        <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 20 20"><path d="M10 2a4 4 0 00-4 4v3H5a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2h-1V6a4 4 0 00-4-4zm2 7V6a2 2 0 10-4 0v3h4z"/></svg>
+        Lot Walk
+      </div>
 
       <!-- Admin: Users -->
       <div x-show="isAdmin" class="nav-item" :class="tab==='users'&&'active'" @click="tab='users';loadUsers()">
@@ -184,10 +192,19 @@
           <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
           Refresh
         </button>
+        <button class="btn-ghost text-xs" @click="sendWeeklyDigest()">Weekly Digest</button>
       </div>
     </header>
 
     <div class="flex-1 p-8 space-y-6 overflow-x-hidden">
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='inventory' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='inventory'">Inventory</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='analytics' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='analytics'">Analytics</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='history' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='history'">Sync History</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='deal_history' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='deal_history';loadDealHistory()">Deal History</button>
+        <button x-show="isAdmin" class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='users' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='users';loadUsers()">Users</button>
+      </div>
 
       <!-- ══ STAT CARDS ═════════════════════════════════════════════════════ -->
       <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -318,6 +335,10 @@
               </template>
             </select>
           </div>
+          <label class="inline-flex items-center gap-2 text-xs text-slate-600 font-medium mt-5">
+            <input type="checkbox" x-model="filters.three_row_only" @change="loadVehicles()" class="w-4 h-4 accent-fb">
+            3-Row SUVs
+          </label>
           <!-- Clear -->
           <button class="btn-ghost text-xs" @click="clearFilters()">Clear</button>
           <!-- Count -->
@@ -354,7 +375,8 @@
                   <tr><td colspan="14" class="py-12 text-center text-slate-400 text-sm">No vehicles match your filters.</td></tr>
                 </template>
                 <template x-for="v in vehicles" :key="v.vin">
-                  <tr class="hover:bg-blue-50/40 transition-colors cursor-default group"
+                  <tr class="transition-colors cursor-default group"
+                      :class="v.days_on_lot >= 60 ? 'bg-red-50/40 hover:bg-red-50' : v.days_on_lot >= 30 ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-blue-50/40'"
                       @click="openModal(v)">
                     <!-- Thumb -->
                     <td class="px-3 py-2.5">
@@ -369,6 +391,10 @@
                       <p class="font-semibold text-slate-900 text-xs leading-tight" x-text="v.year + ' ' + v.make + ' ' + v.model"></p>
                       <p class="text-slate-400 text-xs leading-tight" x-text="v.trim || '—'"></p>
                       <p class="text-slate-400 text-xs leading-tight" x-text="v.exterior_color || ''"></p>
+                      <div class="mt-1 flex flex-wrap gap-1">
+                        <span class="badge" :class="v.days_on_lot >= 60 ? 'bg-red-100 text-red-700' : v.days_on_lot >= 30 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'" x-text="'DOL ' + (v.days_on_lot || 0)"></span>
+                        <span x-show="v.price_war_alert" class="badge bg-red-100 text-red-700">⚠ Price war</span>
+                      </div>
                     </td>
                     <!-- Stock / VIN -->
                     <td class="px-3 py-2.5">
@@ -454,6 +480,7 @@
                       <div class="flex items-center justify-center gap-1.5">
                         <button
                           class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          @click.stop.prevent="openPencilDesk(v)">
                           :disabled="!v.price_ok"
                           @click="openPencilDesk(v)">
                           Desk
@@ -594,6 +621,58 @@
               </template>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- ══ DEAL HISTORY TAB ══════════════════════════════════════════════ -->
+      <div x-show="tab==='deal_history'" x-cloak>
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-100">
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Vehicle</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Stock / VIN</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Sold Price</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Days Listed</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Benchmark</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <template x-if="dealHistory.length === 0">
+                <tr><td colspan="5" class="py-10 text-center text-slate-400">No sold/deal history yet.</td></tr>
+              </template>
+              <template x-for="d in dealHistory" :key="d.vin + d.last_seen">
+                <tr>
+                  <td class="px-4 py-2.5 text-xs font-semibold text-slate-800" x-text="(d.year || '') + ' ' + (d.make || '') + ' ' + (d.model || '') + ' ' + (d.trim || '')"></td>
+                  <td class="px-4 py-2.5 text-xs text-slate-500"><span x-text="d.stock_number || '—'"></span><br><span class="font-mono" x-text="d.vin"></span></td>
+                  <td class="px-4 py-2.5 text-right text-xs font-semibold" x-text="d.sold_price ? fmtMoney(d.sold_price) : '—'"></td>
+                  <td class="px-4 py-2.5 text-right text-xs" x-text="d.days_listed"></td>
+                  <td class="px-4 py-2.5 text-xs text-slate-500" x-text="d.benchmark?.avg_days ? ('~' + d.benchmark.avg_days + ' days @ ' + fmtMoney(d.benchmark.avg_price || 0)) : '—'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ LOT WALK TAB ══════════════════════════════════════════════════ -->
+      <div x-show="tab==='lot_walk'" x-cloak class="space-y-4 max-w-2xl">
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">Lot Walk Mode</h3>
+          <p class="text-xs text-slate-500">Scan or type stock # / VIN while on the lot.</p>
+          <input x-model="lotWalkSearch" @input.debounce.150ms="lookupLotWalk()" placeholder="Stock # or VIN"
+            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb"/>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5" x-show="lotWalkVehicle">
+          <h4 class="font-bold text-slate-900 text-sm" x-text="lotWalkVehicle?.year + ' ' + lotWalkVehicle?.make + ' ' + lotWalkVehicle?.model"></h4>
+          <p class="text-xs text-slate-500 mt-1" x-text="(lotWalkVehicle?.stock_number || '—') + ' · ' + lotWalkVehicle?.vin"></p>
+          <div class="mt-3 grid grid-cols-2 gap-3 text-xs">
+            <div class="rounded-lg bg-slate-50 p-2"><p class="text-slate-400">FB Clicks</p><p class="font-bold text-fb" x-text="lotWalkVehicle?.fb_clicks || 0"></p></div>
+            <div class="rounded-lg bg-slate-50 p-2"><p class="text-slate-400">Impressions</p><p class="font-bold" x-text="fmtBig(lotWalkVehicle?.fb_impressions || 0)"></p></div>
+            <div class="rounded-lg bg-slate-50 p-2"><p class="text-slate-400">Days on Lot</p><p class="font-bold" x-text="lotWalkVehicle?.days_on_lot || 0"></p></div>
+            <div class="rounded-lg bg-slate-50 p-2"><p class="text-slate-400">% to Market</p><p class="font-bold" x-text="lotWalkVehicle?.pct_to_market != null ? ((lotWalkVehicle.pct_to_market > 0 ? '+' : '') + lotWalkVehicle.pct_to_market + '%') : '—'"></p></div>
+          </div>
+          <p x-show="lotWalkVehicle?.price_war_alert" class="mt-3 text-xs font-semibold text-red-600">⚠ Undercut overnight risk detected.</p>
         </div>
       </div>
 
@@ -1333,6 +1412,93 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- PENCIL DESKING MODAL                                                    -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div x-show="pencilDeskOpen" x-cloak
+  class="fixed inset-0 z-50 flex items-center justify-center p-4"
+  @keydown.escape.window="pencilDeskOpen=false">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="pencilDeskOpen=false"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[92vh] flex flex-col" x-transition>
+    <div class="flex items-center justify-between p-6 border-b border-slate-100">
+      <div>
+        <h2 class="text-base font-bold text-slate-900">Pencil Desking Dashboard</h2>
+        <p class="text-xs text-slate-400" x-text="pencilVehicle ? (pencilVehicle.year + ' ' + pencilVehicle.make + ' ' + pencilVehicle.model + ' · ' + (pencilVehicle.stock_number || pencilVehicle.vin)) : ''"></p>
+      </div>
+      <button @click="pencilDeskOpen=false" class="text-slate-400 hover:text-slate-700">
+        <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+    <div class="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="space-y-4">
+        <div class="bg-slate-50 rounded-xl p-4 space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">Finance Inputs</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="text-xs font-semibold text-slate-600">APR %
+              <input type="number" step="0.1" min="0" x-model.number="mockPencil.apr" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="text-xs font-semibold text-slate-600">Term (months)
+              <input type="number" min="1" step="1" x-model.number="mockPencil.termMonths" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+          <label class="text-xs font-semibold text-slate-600">Down Payment
+            <input type="number" step="1" min="0" x-model.number="mockPencil.downPayment" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+          </label>
+        </div>
+
+        <div class="bg-slate-50 rounded-xl p-4 space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">Fee Setup (editable labels)</h3>
+          <div class="grid grid-cols-5 gap-2 items-end">
+            <label class="col-span-3 text-xs font-semibold text-slate-600">Addendum Label
+              <input type="text" x-model="mockPencil.addendumLabel" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="col-span-2 text-xs font-semibold text-slate-600">Amount
+              <input type="number" min="0" step="1" x-model.number="mockPencil.addendumAmount" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+          <div class="grid grid-cols-5 gap-2 items-end">
+            <label class="col-span-3 text-xs font-semibold text-slate-600">Tax Label
+              <input type="text" x-model="mockPencil.taxLabel" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="col-span-2 text-xs font-semibold text-slate-600">Tax Rate %
+              <input type="number" min="0" step="0.01" x-model.number="mockPencil.taxRate" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+          <div class="grid grid-cols-5 gap-2 items-end">
+            <label class="col-span-3 text-xs font-semibold text-slate-600">Doc Fee Label
+              <input type="text" x-model="mockPencil.docFeeLabel" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="col-span-2 text-xs font-semibold text-slate-600">Amount
+              <input type="number" min="0" step="1" x-model.number="mockPencil.docFeeAmount" class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+        <h3 class="text-sm font-bold text-slate-800">Live Pencil Preview</h3>
+        <table class="w-full text-sm">
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Internet Price</td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().basePrice)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500" x-text="mockPencil.addendumLabel"></td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().addendumAmount)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500" x-text="mockPencil.taxLabel + ' (' + Number(mockPencil.taxRate || 0).toFixed(2) + '%)'"></td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().taxAmount)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500" x-text="mockPencil.docFeeLabel"></td><td class="py-2 text-right font-semibold" x-text="fmtMoney(pencilTotals().docFeeAmount)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Out-the-Door</td><td class="py-2 text-right font-bold text-slate-900" x-text="fmtMoney(pencilTotals().outTheDoor)"></td></tr>
+          <tr class="border-b border-slate-100"><td class="py-2 text-slate-500">Down Payment</td><td class="py-2 text-right font-semibold" x-text="fmtMoney(mockPencil.downPayment)"></td></tr>
+          <tr><td class="py-2 text-slate-500">Amount Financed</td><td class="py-2 text-right font-bold text-fb" x-text="fmtMoney(pencilTotals().amountFinanced)"></td></tr>
+        </table>
+
+        <div class="rounded-xl bg-fb/10 border border-fb/20 p-4">
+          <p class="text-xs text-slate-600">Estimated Monthly Payment</p>
+          <p class="text-3xl font-extrabold text-fb" x-text="fmtMoney(pencilTotals().monthlyPayment)"></p>
+          <p class="text-xs text-slate-500 mt-1" x-text="Number(mockPencil.apr || 0).toFixed(2) + '% APR · ' + (mockPencil.termMonths || 0) + ' months'"></p>
+        </div>
+
+        <button class="btn-primary w-full justify-center" @click="downloadMockPencil(pencilVehicle)" :disabled="!pencilVehicle">Download Pencil</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
 <!-- SETTINGS MODAL                                                          -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <div x-show="settingsOpen" x-cloak
@@ -1436,6 +1602,7 @@ function dashboard() {
     vehicles: [],
     summary: {},
     syncRuns: [],
+    dealHistory: [],
     makes: [],
     years: [],
     modal: null,
@@ -1444,7 +1611,7 @@ function dashboard() {
     statsRunning: false,
     statusMsg: '',
     lastRefreshed: '—',
-    filters: { search: '', make: '', year: '', condition: '', body_style: '' },
+    filters: { search: '', make: '', year: '', condition: '', body_style: '', three_row_only: false },
     // auth
     currentUser: '',
     isAdmin: false,
@@ -1527,7 +1694,7 @@ function dashboard() {
 
     async init() {
       await this.loadMe()
-      await Promise.all([this.loadSummary(), this.loadVehicles(), this.loadMeta(), this.loadRuns(), this.loadSettings()])
+      await Promise.all([this.loadSummary(), this.loadVehicles(), this.loadMeta(), this.loadRuns(), this.loadSettings(), this.loadDealHistory()])
       this.lastRefreshed = new Date().toLocaleTimeString()
       this.$nextTick(() => this.drawCharts())
     },
@@ -1641,7 +1808,7 @@ function dashboard() {
 
     async loadVehicles() {
       this.loading = true
-      const p = new URLSearchParams(Object.fromEntries(Object.entries(this.filters).filter(([,v])=>v)))
+      const p = new URLSearchParams(Object.fromEntries(Object.entries(this.filters).filter(([,v]) => !(v === '' || v === false || v == null))))
       const r = await fetch('/api/vehicles?' + p)
       const d = await r.json()
       this.vehicles = d.vehicles
@@ -1660,8 +1827,35 @@ function dashboard() {
       this.syncRuns = d.runs
     },
 
+    async loadDealHistory() {
+      const r = await fetch('/api/deal-history?limit=100')
+      if (!r.ok) return
+      const d = await r.json()
+      this.dealHistory = d.deals || []
+    },
+
+    lookupLotWalk() {
+      const q = (this.lotWalkSearch || '').trim().toLowerCase()
+      if (!q) { this.lotWalkVehicle = null; return }
+      this.lotWalkVehicle = this.vehicles.find(v =>
+        (v.stock_number || '').toLowerCase().includes(q) ||
+        (v.vin || '').toLowerCase().includes(q)
+      ) || null
+    },
+
+    async sendWeeklyDigest() {
+      const r = await fetch('/api/weekly-digest', { method: 'POST' })
+      const d = await r.json()
+      if (r.ok) {
+        this.statusMsg = 'Weekly digest generated (' + (d.digest?.generated_at || 'now') + ')'
+      } else {
+        this.statusMsg = d.detail || 'Failed to generate digest'
+      }
+      setTimeout(() => this.statusMsg = '', 6000)
+    },
+
     clearFilters() {
-      this.filters = { search:'', make:'', year:'', condition:'', body_style:'' }
+      this.filters = { search:'', make:'', year:'', condition:'', body_style:'', three_row_only:false }
       this.loadVehicles()
     },
 
