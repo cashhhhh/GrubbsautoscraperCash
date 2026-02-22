@@ -16,6 +16,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 import bcrypt as _bcrypt
+import ravendb_cache
 
 
 def _hash_password(password: str) -> str:
@@ -43,6 +44,9 @@ def _conn() -> sqlite3.Connection:
 # Schema
 # ─────────────────────────────────────────────────────────────────────────────
 def init_db() -> None:
+    # Try to initialize RavenDB caching
+    ravendb_cache.init_ravendb()
+
     with _conn() as c:
         c.executescript("""
         CREATE TABLE IF NOT EXISTS vehicles (
@@ -771,62 +775,76 @@ _COMPS_TTL_HOURS = 24
 
 
 def get_comps_cache(cache_key: str) -> list | None:
-    """Return cached listings if fresh (< 24 h old), else None."""
-    with _conn() as c:
-        row = c.execute(
-            "SELECT data, fetched_at FROM comps_cache WHERE cache_key=?",
-            (cache_key,)
-        ).fetchone()
-    if not row:
-        return None
-    fetched = datetime.fromisoformat(row["fetched_at"])
-    age_h = (datetime.now(timezone.utc).replace(tzinfo=None) - fetched).total_seconds() / 3600
-    if age_h > _COMPS_TTL_HOURS:
-        return None
-    return json.loads(row["data"])
+    """Return cached listings if fresh (< 24 h old), else None. Uses RavenDB with SQLite fallback."""
+    # Try RavenDB first, then fall back to SQLite
+    def _sqlite_fallback(key: str) -> list | None:
+        with _conn() as c:
+            row = c.execute(
+                "SELECT data, fetched_at FROM comps_cache WHERE cache_key=?",
+                (key,)
+            ).fetchone()
+        if not row:
+            return None
+        fetched = datetime.fromisoformat(row["fetched_at"])
+        age_h = (datetime.now(timezone.utc).replace(tzinfo=None) - fetched).total_seconds() / 3600
+        if age_h > _COMPS_TTL_HOURS:
+            return None
+        return json.loads(row["data"])
+
+    return ravendb_cache.get_comps_cache(cache_key, fallback_fn=_sqlite_fallback)
 
 
 def set_comps_cache(cache_key: str, listings: list) -> None:
-    now = datetime.utcnow().isoformat()
-    with _conn() as c:
-        c.execute(
-            """INSERT INTO comps_cache (cache_key, data, fetched_at) VALUES (?,?,?)
-               ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at""",
-            (cache_key, json.dumps(listings), now)
-        )
+    """Cache listings in RavenDB with SQLite fallback."""
+    def _sqlite_fallback(key: str, data: list) -> None:
+        now = datetime.utcnow().isoformat()
+        with _conn() as c:
+            c.execute(
+                """INSERT INTO comps_cache (cache_key, data, fetched_at) VALUES (?,?,?)
+                   ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at""",
+                (key, json.dumps(data), now)
+            )
+
+    ravendb_cache.set_comps_cache(cache_key, listings, fallback_fn=_sqlite_fallback)
 
 
 def get_vin_cache(vin: str) -> dict | None:
-    """Return cached VIN decode + sticker data, or None if not found."""
-    with _conn() as c:
-        row = c.execute(
-            "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?",
-            (vin,)
-        ).fetchone()
-    if not row:
-        return None
-    return {"specs": json.loads(row["specs_json"]), "sticker_url": row["sticker_url"]}
+    """Return cached VIN decode + sticker data, or None if not found. Uses RavenDB with SQLite fallback."""
+    def _sqlite_fallback(v: str) -> dict | None:
+        with _conn() as c:
+            row = c.execute(
+                "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?",
+                (v,)
+            ).fetchone()
+        if not row:
+            return None
+        return {"specs": json.loads(row["specs_json"]), "sticker_url": row["sticker_url"]}
+
+    return ravendb_cache.get_vin_cache(vin, fallback_fn=_sqlite_fallback)
 
 
 def set_vin_cache(vin: str, specs: list | None = None, sticker_url: str | None = None) -> None:
-    """Upsert VIN cache; only updates fields that are provided."""
-    with _conn() as c:
-        existing = c.execute(
-            "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?", (vin,)
-        ).fetchone()
-        now = datetime.utcnow().isoformat()
-        if existing:
-            new_specs = json.dumps(specs) if specs is not None else existing["specs_json"]
-            new_sticker = sticker_url if sticker_url is not None else existing["sticker_url"]
-            c.execute(
-                "UPDATE vin_cache SET specs_json=?, sticker_url=?, fetched_at=? WHERE vin=?",
-                (new_specs, new_sticker, now, vin)
-            )
-        else:
-            c.execute(
-                "INSERT INTO vin_cache (vin, specs_json, sticker_url, fetched_at) VALUES (?,?,?,?)",
-                (vin, json.dumps(specs or []), sticker_url or "", now)
-            )
+    """Upsert VIN cache; only updates fields that are provided. Uses RavenDB with SQLite fallback."""
+    def _sqlite_fallback(v: str, s: list | None = None, u: str | None = None) -> None:
+        with _conn() as c:
+            existing = c.execute(
+                "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?", (v,)
+            ).fetchone()
+            now = datetime.utcnow().isoformat()
+            if existing:
+                new_specs = json.dumps(s) if s is not None else existing["specs_json"]
+                new_sticker = u if u is not None else existing["sticker_url"]
+                c.execute(
+                    "UPDATE vin_cache SET specs_json=?, sticker_url=?, fetched_at=? WHERE vin=?",
+                    (new_specs, new_sticker, now, v)
+                )
+            else:
+                c.execute(
+                    "INSERT INTO vin_cache (vin, specs_json, sticker_url, fetched_at) VALUES (?,?,?,?)",
+                    (v, json.dumps(s or []), u or "", now)
+                )
+
+    ravendb_cache.set_vin_cache(vin, specs, sticker_url, fallback_fn=_sqlite_fallback)
 
 
 def get_deals(vin: str = "", limit: int = 50) -> list[dict]:
