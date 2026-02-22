@@ -1267,6 +1267,45 @@
             </template>
           </div>
 
+          <!-- Filter toggle button -->
+          <div class="mb-4">
+            <button @click="marketFilterOpen = !marketFilterOpen" class="btn-ghost text-xs flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L13 11.414V17a1 1 0 01-.293.707l-2 2A1 1 0 0110 20v-5.586L5.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd"/></svg>
+              <span x-show="!marketFilterOpen">Adjust Filters</span>
+              <span x-show="marketFilterOpen">Hide Filters</span>
+            </button>
+          </div>
+
+          <!-- Filters panel -->
+          <template x-if="marketFilterOpen">
+            <div class="bg-slate-50 rounded-xl p-4 mb-4 space-y-3">
+              <p class="text-xs text-slate-500 font-semibold">Vehicle: <span x-show="marketVehicle.year" x-text="marketVehicle.year + ' (' + (marketVehicle.miles ? Number(marketVehicle.miles).toLocaleString() + ' mi' : 'miles unknown') + ')'"></span></p>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-1">Year Min</label>
+                  <input type="number" x-model.number="marketFilters.year_min" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-1">Year Max</label>
+                  <input type="number" x-model.number="marketFilters.year_max" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-1">Miles Min</label>
+                  <input type="number" x-model.number="marketFilters.miles_min" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-1">Miles Max</label>
+                  <input type="number" x-model.number="marketFilters.miles_max" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg" />
+                </div>
+              </div>
+
+              <button @click="loadMarketComps(marketFilters)" class="btn-primary text-xs w-full">
+                Apply Filters
+              </button>
+            </div>
+          </template>
+
           <!-- Our price reference -->
           <template x-if="marketOurPrice">
             <div class="flex items-center gap-2 mb-3 text-xs text-slate-500">
@@ -1825,6 +1864,9 @@ function dashboard() {
     marketSearch: null,
     marketError: '',
     marketFetched: false,
+    marketFilters: { year_min: null, year_max: null, miles_min: null, miles_max: null },
+    marketVehicle: { year: null, miles: null },
+    marketFilterOpen: false,
     loadingMarket: false,
     // vin specs
     vinSpecs: [],
@@ -2329,19 +2371,29 @@ function dashboard() {
       setTimeout(() => this.dealSaveMsg = '', 4000)
     },
 
-    async loadMarketComps() {
+    async loadMarketComps(filters = null) {
       if (!this.modal?.vin) return
       this.loadingMarket = true
       this.marketError = ''
       this.marketComps = []
       this.marketFetched = false
       try {
-        const r = await fetch('/api/market-comps/' + encodeURIComponent(this.modal.vin))
+        let url = '/api/market-comps/' + encodeURIComponent(this.modal.vin)
+        const params = new URLSearchParams()
+        if (filters && filters.year_min != null) params.append('year_min', filters.year_min)
+        if (filters && filters.year_max != null) params.append('year_max', filters.year_max)
+        if (filters && filters.miles_min != null) params.append('miles_min', filters.miles_min)
+        if (filters && filters.miles_max != null) params.append('miles_max', filters.miles_max)
+        if (params.toString()) url += '?' + params.toString()
+
+        const r = await fetch(url)
         const d = await r.json()
         if (r.ok) {
           this.marketComps  = d.listings
           this.marketOurPrice = d.our_price
           this.marketSearch  = d.search
+          this.marketVehicle = d.vehicle || {}
+          this.marketFilters = d.filters || { year_min: null, year_max: null, miles_min: null, miles_max: null }
           this.marketFetched = true
           // Update price war map for this VIN
           if (this.modal?.vin) {

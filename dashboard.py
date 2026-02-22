@@ -556,7 +556,14 @@ def api_get_deals(
 # Market comps (MarketCheck API)
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/api/market-comps/{vin}")
-def api_market_comps(vin: str = FPath(...), _: dict = Depends(_current_user)):
+def api_market_comps(
+    vin: str = FPath(...),
+    year_min: Optional[int] = Query(None),
+    year_max: Optional[int] = Query(None),
+    miles_min: Optional[int] = Query(None),
+    miles_max: Optional[int] = Query(None),
+    _: dict = Depends(_current_user)
+):
     settings  = db.get_all_settings(_ENV_ADDENDUM)
     api_key   = settings.get("marketcheck_api_key", "")
     dealer_zip = settings.get("dealer_zip", "")
@@ -575,9 +582,21 @@ def api_market_comps(vin: str = FPath(...), _: dict = Depends(_current_user)):
     make  = v.get("make", "")
     model = v.get("model", "")
     our_price = v.get("price_override") if v.get("price_override") is not None else v.get("price_dollars")
+    vehicle_year = v.get("year")
+    vehicle_miles = v.get("miles")
 
     if not make or not model:
         raise HTTPException(400, "Vehicle is missing make/model data")
+
+    # ── Default filter values to vehicle's year and mileage ──────────────────
+    if year_min is None and vehicle_year:
+        year_min = vehicle_year
+    if year_max is None and vehicle_year:
+        year_max = vehicle_year
+    if miles_min is None and vehicle_miles is not None:
+        miles_min = max(0, vehicle_miles - 1000)
+    if miles_max is None and vehicle_miles is not None:
+        miles_max = vehicle_miles + 1000
 
     # ── Cache check (same make/model/zip/radius share one daily call) ─────────
     cache_key = f"{make.lower()}|{model.lower()}|{dealer_zip}|{radius}"
@@ -588,12 +607,22 @@ def api_market_comps(vin: str = FPath(...), _: dict = Depends(_current_user)):
             p = c.get("price")
             c["beats_us"]   = (p < our_price) if (p and our_price) else None
             c["price_diff"] = (p - our_price) if (p and our_price) else None
+
+        # Apply filters
+        filtered = cached
+        if year_min is not None and year_max is not None:
+            filtered = [c for c in filtered if c.get("year") and year_min <= c.get("year") <= year_max]
+        if miles_min is not None and miles_max is not None:
+            filtered = [c for c in filtered if c.get("miles") is not None and miles_min <= c.get("miles") <= miles_max]
+
         return {
-            "listings":  cached,
-            "count":     len(cached),
+            "listings":  filtered,
+            "count":     len(filtered),
             "our_price": our_price,
             "cached":    True,
             "search":    {"make": make, "model": model, "zip": dealer_zip, "radius": radius},
+            "vehicle":   {"year": vehicle_year, "miles": vehicle_miles},
+            "filters":   {"year_min": year_min, "year_max": year_max, "miles_min": miles_min, "miles_max": miles_max},
         }
 
     try:
@@ -647,12 +676,21 @@ def api_market_comps(vin: str = FPath(...), _: dict = Depends(_current_user)):
 
     db.set_comps_cache(cache_key, enriched)
 
+    # Apply filters
+    filtered = enriched
+    if year_min is not None and year_max is not None:
+        filtered = [c for c in filtered if c.get("year") and year_min <= c.get("year") <= year_max]
+    if miles_min is not None and miles_max is not None:
+        filtered = [c for c in filtered if c.get("miles") is not None and miles_min <= c.get("miles") <= miles_max]
+
     return {
-        "listings":  enriched,
-        "count":     len(enriched),
+        "listings":  filtered,
+        "count":     len(filtered),
         "our_price": our_price,
         "cached":    False,
         "search":    {"make": make, "model": model, "zip": dealer_zip, "radius": radius},
+        "vehicle":   {"year": vehicle_year, "miles": vehicle_miles},
+        "filters":   {"year_min": year_min, "year_max": year_max, "miles_min": miles_min, "miles_max": miles_max},
     }
 
 
