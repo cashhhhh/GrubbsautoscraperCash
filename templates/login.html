@@ -15,53 +15,186 @@
     }
   </script>
   <style>
-    body { background: #0f172a; }
-    .card { background: #1e293b; border: 1px solid rgba(255,255,255,.08); }
-    input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #0f172a inset !important; -webkit-text-fill-color: #f1f5f9 !important; }
+    @keyframes gradient-shift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes float-in {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @keyframes glow-pulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(24, 119, 242, 0); }
+      50% { box-shadow: 0 0 30px rgba(24, 119, 242, 0.2); }
+    }
+    @keyframes slide-down {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @keyframes button-shine {
+      0% { box-shadow: 0 0 20px rgba(24, 119, 242, 0.3), inset 0 1px 0 rgba(255,255,255,0); }
+      50% { box-shadow: 0 0 40px rgba(24, 119, 242, 0.5), inset 0 1px 0 rgba(255,255,255,.1); }
+      100% { box-shadow: 0 0 20px rgba(24, 119, 242, 0.3), inset 0 1px 0 rgba(255,255,255,0); }
+    }
+
+    body {
+      background: linear-gradient(-45deg, #0f172a, #1a2d4d, #0f172a, #1a4d6d);
+      background-size: 400% 400%;
+      animation: gradient-shift 15s ease infinite;
+      min-height: 100vh;
+    }
+
+    .logo-container {
+      animation: float-in 0.6s ease-out;
+    }
+
+    .card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      animation: float-in 0.8s ease-out 0.2s both;
+    }
+
+    .card:hover {
+      border-color: rgba(24, 119, 242, 0.2);
+      transition: border-color 0.3s ease;
+    }
+
+    input:-webkit-autofill {
+      -webkit-box-shadow: 0 0 0 30px #0f172a inset !important;
+      -webkit-text-fill-color: #f1f5f9 !important;
+    }
+
+    input {
+      transition: all 0.3s ease;
+    }
+
+    input:focus {
+      background-color: rgba(71, 85, 105, 0.5);
+      box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.1), inset 0 0 0 1px rgba(24, 119, 242, 0.3);
+      transform: translateY(-2px);
+    }
+
+    #submit-btn {
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 4px 15px rgba(24, 119, 242, 0.3);
+    }
+
+    #submit-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(24, 119, 242, 0.5);
+      animation: button-shine 2s ease-in-out infinite;
+    }
+
+    #submit-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    #submit-btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: left 0.5s;
+    }
+
+    #submit-btn:hover::before:not(:disabled) {
+      left: 100%;
+    }
+
+    .form-group {
+      animation: float-in 0.6s ease-out;
+    }
+
+    .form-group:nth-child(1) { animation-delay: 0.3s; }
+    .form-group:nth-child(2) { animation-delay: 0.4s; }
+    .form-group:nth-child(3) { animation-delay: 0.5s; }
+
+    #error-msg {
+      animation: slide-down 0.3s ease-out;
+      backdrop-filter: blur(10px);
+    }
+
+    .footer-text {
+      animation: float-in 1s ease-out 0.6s both;
+    }
+
+    h1 {
+      background: linear-gradient(135deg, #ffffff, #cbd5e1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-weight: 800;
+    }
+
+    .form-label {
+      background: linear-gradient(135deg, #cbd5e1, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
   </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4">
+<body class="flex items-center justify-center p-4">
 
   <div class="w-full max-w-sm">
     <!-- Logo / header -->
-    <div class="text-center mb-8">
-      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand/10 mb-4">
-        <svg class="w-7 h-7 text-brand fill-current" style="color:#1877F2" viewBox="0 0 24 24">
+    <div class="logo-container text-center mb-10">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 mb-5 shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-shadow duration-300">
+        <svg class="w-8 h-8 text-white fill-current" viewBox="0 0 24 24">
           <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
         </svg>
       </div>
-      <h1 class="text-xl font-bold text-white">Grubbs INFINITI</h1>
-      <p class="text-sm text-slate-400 mt-1">Marketplace Dashboard</p>
+      <h1 class="text-2xl font-bold text-white mb-1">Grubbs INFINITI</h1>
+      <p class="text-sm text-slate-400">Marketplace Dashboard</p>
     </div>
 
     <!-- Card -->
-    <div class="card rounded-2xl p-8">
-      <h2 class="text-lg font-semibold text-white mb-6">Sign in</h2>
+    <div class="card rounded-3xl p-8 shadow-2xl shadow-black/30">
+      <h2 class="text-lg font-semibold text-white mb-7">Welcome Back</h2>
 
       <div id="error-msg" class="hidden mb-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm"></div>
 
-      <form id="login-form" class="space-y-4">
-        <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
+      <form id="login-form" class="space-y-5">
+        <div class="form-group">
+          <label class="block text-xs font-semibold form-label mb-2">Username</label>
           <input id="username" type="text" autocomplete="username" required
-            class="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
-            placeholder="Enter username"/>
+            class="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none transition-all duration-300"
+            placeholder="your username"/>
         </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
+        <div class="form-group">
+          <label class="block text-xs font-semibold form-label mb-2">Password</label>
           <input id="password" type="password" autocomplete="current-password" required
-            class="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
-            placeholder="Enter password"/>
+            class="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none transition-all duration-300"
+            placeholder="your password"/>
         </div>
         <button type="submit" id="submit-btn"
-          class="w-full py-2.5 rounded-lg bg-brand text-white text-sm font-semibold hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-semibold focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed mt-6"
           style="background:#1877F2">
           Sign in
         </button>
       </form>
     </div>
 
-    <p class="text-center text-xs text-slate-600 mt-6">Grubbs INFINITI of San Antonio · Internal Use Only</p>
+    <p class="footer-text text-center text-xs text-slate-500 mt-8">Grubbs INFINITI of San Antonio · Internal Use Only</p>
   </div>
 
   <script>
