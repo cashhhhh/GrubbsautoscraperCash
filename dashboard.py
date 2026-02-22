@@ -34,6 +34,8 @@ FB_CATALOG_ID    = os.getenv("FB_CATALOG_ID", "")
 FB_API_VERSION   = os.getenv("FB_API_VERSION", "v21.0")
 _ENV_ADDENDUM    = int(os.getenv("ADDENDUM_AMOUNT", "0"))   # env fallback only
 DASHBOARD_PORT   = int(os.getenv("PORT", os.getenv("DASHBOARD_PORT", "8000")))
+MARKETCHECK_API_KEY = os.getenv("MARKETCHECK_API_KEY", "")
+MARKETCHECK_API_SECRET = os.getenv("MARKETCHECK_API_SECRET", "")
 
 _TEMPLATE = Path(__file__).parent / "templates" / "dashboard.html"
 
@@ -565,7 +567,8 @@ def api_market_comps(
     _: dict = Depends(_current_user)
 ):
     settings  = db.get_all_settings(_ENV_ADDENDUM)
-    api_key   = settings.get("marketcheck_api_key", "")
+    # Use env var first, then fall back to database
+    api_key   = MARKETCHECK_API_KEY or settings.get("marketcheck_api_key", "")
     dealer_zip = settings.get("dealer_zip", "")
     radius    = settings.get("market_radius", 150)
 
@@ -702,7 +705,8 @@ def api_market_value(vin: str = FPath(...), _: dict = Depends(_current_user)):
     import statistics
 
     settings   = db.get_all_settings(_ENV_ADDENDUM)
-    api_key    = settings.get("marketcheck_api_key", "")
+    # Use env var first, then fall back to database
+    api_key    = MARKETCHECK_API_KEY or settings.get("marketcheck_api_key", "")
     dealer_zip = settings.get("dealer_zip", "")
     radius     = settings.get("market_radius", 150)
 
@@ -800,7 +804,8 @@ def api_vin_decode(vin: str = FPath(...), _: dict = Depends(_current_user)):
         return {"specs": cached["specs"], "cached": True}
 
     settings = db.get_all_settings(_ENV_ADDENDUM)
-    api_key  = settings.get("marketcheck_api_key", "")
+    # Use env var first, then fall back to database
+    api_key  = MARKETCHECK_API_KEY or settings.get("marketcheck_api_key", "")
     if not api_key:
         raise HTTPException(400, "MarketCheck API key not configured — add it in Settings")
 
@@ -833,7 +838,8 @@ def api_window_sticker(vin: str = FPath(...), _: dict = Depends(_current_user)):
         return {"sticker_url": cached["sticker_url"], "cached": True}
 
     settings = db.get_all_settings(_ENV_ADDENDUM)
-    api_key  = settings.get("marketcheck_api_key", "")
+    # Use env var first, then fall back to database
+    api_key  = MARKETCHECK_API_KEY or settings.get("marketcheck_api_key", "")
     if not api_key:
         raise HTTPException(400, "MarketCheck API key not configured — add it in Settings")
 
