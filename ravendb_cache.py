@@ -3,17 +3,12 @@ RavenDB persistent cache for MarketCheck API responses.
 Falls back to SQLite if RavenDB is unavailable.
 """
 
-import json
+import importlib
 import os
 from datetime import datetime, timezone
 from typing import Optional
 
-try:
-    from ravendb import DocumentStore
-    RAVENDB_AVAILABLE = True
-except ImportError:
-    RAVENDB_AVAILABLE = False
-    DocumentStore = None  # type: ignore
+DocumentStore = None
 
 
 _COMPS_TTL_HOURS = 24
@@ -24,26 +19,34 @@ def init_ravendb() -> bool:
     """Initialize RavenDB connection. Returns True if successful."""
     global _store
 
-    if not RAVENDB_AVAILABLE:
-        print("[RavenDB] pyravendb not installed, using SQLite fallback")
+    document_store_cls = _load_document_store()
+
+    if not document_store_cls:
+        print("[RavenDB] Python client not available; using SQLite fallback")
+        print("           Install with: pip install pyravendb==5.0.0.5")
+        return False
+
+    server_url = os.getenv("RAVENDB_URL", "").strip()
+    database = os.getenv("RAVENDB_DATABASE", "").strip()
+
+    if not server_url or not database:
+        print("[RavenDB] Missing RAVENDB_URL or RAVENDB_DATABASE; using SQLite fallback")
         return False
 
     try:
-        server_url = os.getenv(
-            "RAVENDB_URL",
-            "https://a.free.cashmcccombs.ravendb.cloud"
-        )
-        username = os.getenv("RAVENDB_USERNAME", "Cashmccombs@gmail.com")
-        password = os.getenv("RAVENDB_PASSWORD", "Cash1345")
-        database = os.getenv("RAVENDB_DATABASE", "cashdashboard")
-
-        _store = DocumentStore(urls=[server_url], database=database)
+        _store = document_store_cls(urls=[server_url], database=database)
 
         # Authentication
         _store.conventions.disable_topology_updates = True
-        _store.auth_options.certificate = os.getenv("RAVENDB_CERT_PATH")
-        _store.auth_options.username = username
-        _store.auth_options.password = password
+        cert_path = os.getenv("RAVENDB_CERT_PATH", "").strip()
+        username = os.getenv("RAVENDB_USERNAME", "").strip()
+        password = os.getenv("RAVENDB_PASSWORD", "").strip()
+
+        if cert_path:
+            _store.auth_options.certificate = cert_path
+        if username and password:
+            _store.auth_options.username = username
+            _store.auth_options.password = password
 
         _store.initialize()
 
@@ -57,6 +60,22 @@ def init_ravendb() -> bool:
         print(f"[RavenDB] Connection failed: {e}. Using SQLite fallback.")
         _store = None
         return False
+
+
+def _load_document_store():
+    """Load RavenDB DocumentStore lazily so environments can install dependencies later."""
+    global DocumentStore
+
+    if DocumentStore:
+        return DocumentStore
+
+    try:
+        module = importlib.import_module("ravendb")
+        DocumentStore = getattr(module, "DocumentStore", None)
+    except Exception:
+        DocumentStore = None
+
+    return DocumentStore
 
 
 def get_comps_cache(cache_key: str, fallback_fn=None) -> Optional[list]:
