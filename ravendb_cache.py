@@ -26,12 +26,11 @@ def init_ravendb() -> bool:
         print("           Install with: pip install pyravendb==5.0.0.5")
         return False
 
-    server_url = os.getenv("RAVENDB_URL", "").strip()
-    database = os.getenv("RAVENDB_DATABASE", "").strip()
-
-    if not server_url or not database:
-        print("[RavenDB] Missing RAVENDB_URL or RAVENDB_DATABASE; using SQLite fallback")
-        return False
+    server_url = os.getenv(
+            "RAVENDB_URL",
+            "https://a.free.cashmcccombs.ravendb.cloud"
+        ).strip()
+    database = os.getenv("RAVENDB_DATABASE", "cashdashboard").strip()
 
     try:
         _store = document_store_cls(urls=[server_url], database=database)
@@ -39,8 +38,8 @@ def init_ravendb() -> bool:
         # Authentication
         _store.conventions.disable_topology_updates = True
         cert_path = os.getenv("RAVENDB_CERT_PATH", "").strip()
-        username = os.getenv("RAVENDB_USERNAME", "").strip()
-        password = os.getenv("RAVENDB_PASSWORD", "").strip()
+        username = os.getenv("RAVENDB_USERNAME", "Cashmccombs@gmail.com").strip()
+        password = os.getenv("RAVENDB_PASSWORD", "Cash1345").strip()
 
         if cert_path:
             _store.auth_options.certificate = cert_path
