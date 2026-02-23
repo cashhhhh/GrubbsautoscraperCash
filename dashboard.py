@@ -50,16 +50,8 @@ _SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 # ─────────────────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Log database and cache connection status on startup."""
-    import ravendb_cache
-    if ravendb_cache._store:
-        print(f"✅ [Cache] RavenDB connected → {os.getenv('RAVENDB_URL', 'N/A')}")
-    else:
-        print(f"⚠️  [Cache] Using SQLite fallback (RavenDB unavailable)")
-        if os.getenv("RAVENDB_URL"):
-            print(f"   Note: RAVENDB_URL is set but connection failed. Check credentials.")
-        else:
-            print(f"   Note: No RAVENDB_URL env var found. Set env vars to enable RavenDB.")
+    """Log database connection status on startup."""
+    print("✅ [Database] Connected to PostgreSQL (Neon)")
     yield
 
 

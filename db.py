@@ -1,5 +1,5 @@
 """
-db.py — SQLite persistence layer for the FB Marketplace Dashboard.
+db.py — PostgreSQL (Neon) persistence layer for the FB Marketplace Dashboard.
 
 Tables
 ------
@@ -11,12 +11,14 @@ Tables
 
 import json
 import os
-import re
-import sqlite3
 from datetime import datetime, timezone
 
 import bcrypt as _bcrypt
-import ravendb_cache
+import psycopg2
+import psycopg2.extras
+
+# Hardcoded Neon connection string
+DATABASE_URL = "postgresql://neondb_owner:npg_8fsAWx1iHPOv@ep-quiet-queen-aezc7x9v-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 
 
 def _hash_password(password: str) -> str:
@@ -26,31 +28,47 @@ def _hash_password(password: str) -> str:
 def _verify_password(password: str, hashed: str) -> bool:
     return _bcrypt.checkpw(password.encode(), hashed.encode())
 
-DB_PATH = os.getenv("DB_PATH", "inventory.db")
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Connection helper
 # ─────────────────────────────────────────────────────────────────────────────
-def _conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+class PostgresConnection:
+    """Context manager for PostgreSQL connections."""
+
+    def __init__(self):
+        self.conn = None
+
+    def __enter__(self):
+        self.conn = psycopg2.connect(DATABASE_URL)
+        self.conn.autocommit = False
+        return self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self.conn.rollback()
+        else:
+            self.conn.commit()
+        self.conn.close()
+
+
+def _conn():
+    """Return a context manager for database operations."""
+    return PostgresConnection()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Schema
 # ─────────────────────────────────────────────────────────────────────────────
 def init_db() -> None:
-    # Try to initialize RavenDB caching
-    ravendb_cache.init_ravendb()
-
+    """Initialize database schema."""
     with _conn() as c:
-        c.executescript("""
+        # Create extensions
+        c.execute("CREATE EXTENSION IF NOT EXISTS uuid-ossp;")
+
+        # Create tables
+        c.execute("""
         CREATE TABLE IF NOT EXISTS vehicles (
-            vin              TEXT PRIMARY KEY,
+            vin              VARCHAR(17) PRIMARY KEY,
             title            TEXT,
             stock_number     TEXT,
             year             INTEGER,
@@ -64,51 +82,66 @@ def init_db() -> None:
             price_dollars    INTEGER,
             image_url        TEXT    DEFAULT '',
             link             TEXT    DEFAULT '',
-            first_seen       TEXT    NOT NULL,
-            last_seen        TEXT    NOT NULL,
+            first_seen       TIMESTAMP NOT NULL,
+            last_seen        TIMESTAMP NOT NULL,
             is_active        INTEGER DEFAULT 1,
             price_override   INTEGER,
             addendum_override INTEGER,
             market_value     INTEGER,
-            notes            TEXT    DEFAULT ''
+            notes            TEXT    DEFAULT '',
+            price_scrape_attempts INTEGER DEFAULT 0,
+            cost             INTEGER,
+            pack             INTEGER DEFAULT 0,
+            cox_adj_cost_to_market REAL,
+            cox_report_date  TEXT
         );
+        """)
 
+        c.execute("""
         CREATE TABLE IF NOT EXISTS sync_runs (
-            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_at              TEXT NOT NULL,
+            id                  SERIAL PRIMARY KEY,
+            run_at              TIMESTAMP NOT NULL,
             vehicles_found      INTEGER DEFAULT 0,
             vehicles_priced     INTEGER DEFAULT 0,
             vehicles_uploaded   INTEGER DEFAULT 0,
             duration_seconds    REAL    DEFAULT 0,
             success             INTEGER DEFAULT 1
         );
+        """)
 
+        c.execute("""
         CREATE TABLE IF NOT EXISTS vehicle_stats (
-            vin          TEXT NOT NULL,
-            stat_date    TEXT NOT NULL,
+            vin          VARCHAR(17) NOT NULL,
+            stat_date    DATE NOT NULL,
             impressions  INTEGER DEFAULT 0,
             clicks       INTEGER DEFAULT 0,
             saves        INTEGER DEFAULT 0,
             PRIMARY KEY (vin, stat_date)
         );
+        """)
 
+        c.execute("""
         CREATE TABLE IF NOT EXISTS settings (
-            key   TEXT PRIMARY KEY,
+            key   VARCHAR(255) PRIMARY KEY,
             value TEXT NOT NULL DEFAULT ''
         );
+        """)
 
+        c.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            id            SERIAL PRIMARY KEY,
+            username      VARCHAR(255) UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             is_admin      INTEGER DEFAULT 0,
-            created_at    TEXT NOT NULL
+            created_at    TIMESTAMP NOT NULL
         );
+        """)
 
+        c.execute("""
         CREATE TABLE IF NOT EXISTS deals (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            vin             TEXT NOT NULL,
-            created_at      TEXT NOT NULL,
+            id              SERIAL PRIMARY KEY,
+            vin             VARCHAR(17) NOT NULL,
+            created_at      TIMESTAMP NOT NULL,
             created_by      TEXT DEFAULT '',
             customer_name   TEXT DEFAULT '',
             base_price      INTEGER,
@@ -124,51 +157,33 @@ def init_db() -> None:
             gross           INTEGER,
             notes           TEXT DEFAULT ''
         );
+        """)
 
-        CREATE INDEX IF NOT EXISTS idx_vs_vin   ON vehicle_stats(vin);
-        CREATE INDEX IF NOT EXISTS idx_deals_vin ON deals(vin);
-        CREATE INDEX IF NOT EXISTS idx_vs_date  ON vehicle_stats(stat_date);
-        CREATE INDEX IF NOT EXISTS idx_v_make   ON vehicles(make);
-        CREATE INDEX IF NOT EXISTS idx_v_active ON vehicles(is_active);
-
+        c.execute("""
         CREATE TABLE IF NOT EXISTS comps_cache (
-            cache_key   TEXT PRIMARY KEY,
+            cache_key   VARCHAR(255) PRIMARY KEY,
             data        TEXT NOT NULL,
-            fetched_at  TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS vin_cache (
-            vin         TEXT PRIMARY KEY,
-            specs_json  TEXT NOT NULL DEFAULT '[]',
-            sticker_url TEXT NOT NULL DEFAULT '',
-            fetched_at  TEXT NOT NULL
+            fetched_at  TIMESTAMP NOT NULL
         );
         """)
 
-    # Migrate existing DBs that are missing the new columns
-    _migrate()
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS vin_cache (
+            vin         VARCHAR(17) PRIMARY KEY,
+            specs_json  TEXT NOT NULL DEFAULT '[]',
+            sticker_url TEXT NOT NULL DEFAULT '',
+            fetched_at  TIMESTAMP NOT NULL
+        );
+        """)
+
+        # Create indexes
+        c.execute("CREATE INDEX IF NOT EXISTS idx_vs_vin   ON vehicle_stats(vin);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_deals_vin ON deals(vin);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_vs_date  ON vehicle_stats(stat_date);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_v_make   ON vehicles(make);")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_v_active ON vehicles(is_active);")
+
     _seed_admin()
-
-
-def _migrate() -> None:
-    """Add new columns to existing databases without breaking anything."""
-    migrations = [
-        "ALTER TABLE vehicles ADD COLUMN price_override       INTEGER",
-        "ALTER TABLE vehicles ADD COLUMN addendum_override    INTEGER",
-        "ALTER TABLE vehicles ADD COLUMN market_value         INTEGER",
-        "ALTER TABLE vehicles ADD COLUMN notes                TEXT DEFAULT ''",
-        "ALTER TABLE vehicles ADD COLUMN price_scrape_attempts INTEGER DEFAULT 0",
-        "ALTER TABLE vehicles ADD COLUMN cost                 INTEGER",
-        "ALTER TABLE vehicles ADD COLUMN pack                 INTEGER DEFAULT 0",
-        "ALTER TABLE vehicles ADD COLUMN cox_adj_cost_to_market REAL",
-        "ALTER TABLE vehicles ADD COLUMN cox_report_date      TEXT",
-    ]
-    with _conn() as c:
-        for sql in migrations:
-            try:
-                c.execute(sql)
-            except sqlite3.OperationalError:
-                pass  # column already exists — that's fine
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -184,10 +199,11 @@ def _seed_admin() -> None:
 
 def get_user(username: str) -> dict | None:
     with _conn() as c:
-        row = c.execute(
-            "SELECT id, username, password_hash, is_admin, created_at FROM users WHERE username=? COLLATE NOCASE",
+        c.execute(
+            "SELECT id, username, password_hash, is_admin, created_at FROM users WHERE LOWER(username)=LOWER(%s)",
             (username,),
-        ).fetchone()
+        )
+        row = c.fetchone()
     return dict(row) if row else None
 
 
@@ -206,36 +222,37 @@ def create_user(username: str, password: str, is_admin: bool = False) -> bool:
     try:
         with _conn() as c:
             c.execute(
-                "INSERT INTO users (username, password_hash, is_admin, created_at) VALUES (?,?,?,?)",
+                "INSERT INTO users (username, password_hash, is_admin, created_at) VALUES (%s,%s,%s,%s)",
                 (username, hashed, 1 if is_admin else 0, now),
             )
         return True
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
         return False  # username already exists
 
 
 def delete_user(username: str) -> bool:
     with _conn() as c:
-        cur = c.execute("DELETE FROM users WHERE username=? COLLATE NOCASE", (username,))
-    return cur.rowcount > 0
+        c.execute("DELETE FROM users WHERE LOWER(username)=LOWER(%s)", (username,))
+        return c.rowcount > 0
 
 
 def list_users() -> list[dict]:
     with _conn() as c:
-        rows = c.execute(
+        c.execute(
             "SELECT id, username, is_admin, created_at FROM users ORDER BY id"
-        ).fetchall()
-    return [dict(r) for r in rows]
+        )
+        rows = c.fetchall()
+    return [dict(r) for r in rows] if rows else []
 
 
 def change_password(username: str, new_password: str) -> bool:
     hashed = _hash_password(new_password)
     with _conn() as c:
-        cur = c.execute(
-            "UPDATE users SET password_hash=? WHERE username=? COLLATE NOCASE",
+        c.execute(
+            "UPDATE users SET password_hash=%s WHERE LOWER(username)=LOWER(%s)",
             (hashed, username),
         )
-    return cur.rowcount > 0
+        return c.rowcount > 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -243,16 +260,17 @@ def change_password(username: str, new_password: str) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 def get_setting(key: str, default: str = "") -> str:
     with _conn() as c:
-        row = c.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        c.execute("SELECT value FROM settings WHERE key=%s", (key,))
+        row = c.fetchone()
     return row["value"] if row else default
 
 
 def set_setting(key: str, value: str) -> None:
     with _conn() as c:
-        c.execute("""
-            INSERT INTO settings (key, value) VALUES (?,?)
-            ON CONFLICT(key) DO UPDATE SET value=excluded.value
-        """, (key, value))
+        c.execute(
+            "INSERT INTO settings (key, value) VALUES (%s,%s) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value)
+        )
 
 
 def get_all_settings(env_addendum: int = 0) -> dict:
@@ -291,13 +309,14 @@ def get_scrape_attempts(vins: list[str]) -> dict[str, int]:
     """Return {vin: price_scrape_attempts} for the given VINs."""
     if not vins:
         return {}
-    placeholders = ",".join("?" * len(vins))
+    placeholders = ",".join(["%s"] * len(vins))
     with _conn() as c:
-        rows = c.execute(
+        c.execute(
             f"SELECT vin, COALESCE(price_scrape_attempts,0) FROM vehicles WHERE vin IN ({placeholders})",
             vins,
-        ).fetchall()
-    return {r[0]: r[1] for r in rows}
+        )
+        rows = c.fetchall()
+    return {r[0]: r[1] for r in rows} if rows else {}
 
 
 def update_scrape_attempts(updates: dict[str, int]) -> None:
@@ -307,7 +326,7 @@ def update_scrape_attempts(updates: dict[str, int]) -> None:
     with _conn() as c:
         for vin, count in updates.items():
             c.execute(
-                "UPDATE vehicles SET price_scrape_attempts=? WHERE vin=?",
+                "UPDATE vehicles SET price_scrape_attempts=%s WHERE vin=%s",
                 (max(0, count), vin),
             )
 
@@ -315,6 +334,9 @@ def update_scrape_attempts(updates: dict[str, int]) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Cox Auto report import
 # ─────────────────────────────────────────────────────────────────────────────
+import re
+
+
 def parse_cox_report(text: str) -> list[dict]:
     """
     Parse raw Cox Auto inventory report text.
@@ -358,7 +380,8 @@ def cox_import(records: list[dict]) -> dict:
             if not vin or len(vin) != 17:
                 skipped += 1
                 continue
-            row = c.execute("SELECT vin FROM vehicles WHERE vin=?", (vin,)).fetchone()
+            c.execute("SELECT vin FROM vehicles WHERE vin=%s", (vin,))
+            row = c.fetchone()
             if not row:
                 skipped += 1
                 continue
@@ -374,8 +397,8 @@ def cox_import(records: list[dict]) -> dict:
                 fields["market_value"] = round(price / (adj / 100))
 
             if fields:
-                set_clause = ", ".join(f"{k}=?" for k in fields)
-                c.execute(f"UPDATE vehicles SET {set_clause} WHERE vin=?",
+                set_clause = ", ".join(f"{k}=%s" for k in fields)
+                c.execute(f"UPDATE vehicles SET {set_clause} WHERE vin=%s",
                           [*fields.values(), vin])
                 updated += 1
             else:
@@ -409,7 +432,8 @@ def upsert_vehicles(vehicle_rows: list[dict]) -> None:
                 if m:
                     price_dollars = int(m.group(1))
 
-            row = c.execute("SELECT first_seen FROM vehicles WHERE vin = ?", (vin,)).fetchone()
+            c.execute("SELECT first_seen FROM vehicles WHERE vin = %s", (vin,))
+            row = c.fetchone()
             first_seen = row["first_seen"] if row else now
 
             year = v.get("year")
@@ -423,7 +447,7 @@ def upsert_vehicles(vehicle_rows: list[dict]) -> None:
                     (vin, title, stock_number, year, make, model, trim,
                      condition, body_style, mileage, exterior_color,
                      price_dollars, image_url, link, first_seen, last_seen, is_active)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1)
                 ON CONFLICT(vin) DO UPDATE SET
                     title          = excluded.title,
                     stock_number   = excluded.stock_number,
@@ -461,11 +485,11 @@ def update_vehicle_fields(vin: str, fields: dict) -> bool:
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False
-    set_clause = ", ".join(f"{k}=?" for k in updates)
+    set_clause = ", ".join(f"{k}=%s" for k in updates)
     params = list(updates.values()) + [vin]
     with _conn() as c:
-        cur = c.execute(f"UPDATE vehicles SET {set_clause} WHERE vin=?", params)
-    return cur.rowcount > 0
+        c.execute(f"UPDATE vehicles SET {set_clause} WHERE vin=%s", params)
+        return c.rowcount > 0
 
 
 def record_sync_run(run: dict) -> None:
@@ -474,7 +498,7 @@ def record_sync_run(run: dict) -> None:
             INSERT INTO sync_runs
                 (run_at, vehicles_found, vehicles_priced,
                  vehicles_uploaded, duration_seconds, success)
-            VALUES (?,?,?,?,?,?)
+            VALUES (%s,%s,%s,%s,%s,%s)
         """, (
             run.get("run_at", datetime.utcnow().isoformat(timespec="seconds")),
             run.get("vehicles_found", 0),
@@ -491,7 +515,7 @@ def upsert_vehicle_stats(stats: list[dict]) -> None:
         for s in stats:
             c.execute("""
                 INSERT INTO vehicle_stats (vin, stat_date, impressions, clicks, saves)
-                VALUES (?,?,?,?,?)
+                VALUES (%s,%s,%s,%s,%s)
                 ON CONFLICT(vin, stat_date) DO UPDATE SET
                     impressions=excluded.impressions,
                     clicks=excluded.clicks,
@@ -546,26 +570,26 @@ def get_vehicles(
     if active_only:
         filters.append("v.is_active = 1")
     if make:
-        filters.append("LOWER(v.make) = LOWER(?)")
+        filters.append("LOWER(v.make) = LOWER(%s)")
         params.append(make)
     if condition:
-        filters.append("LOWER(v.condition) = LOWER(?)")
+        filters.append("LOWER(v.condition) = LOWER(%s)")
         params.append(condition)
     if body_style:
-        filters.append("LOWER(v.body_style) = LOWER(?)")
+        filters.append("LOWER(v.body_style) = LOWER(%s)")
         params.append(body_style)
     if year:
         try:
-            filters.append("v.year = ?")
+            filters.append("v.year = %s")
             params.append(int(year))
         except ValueError:
             pass
     if search:
-        filters.append("(v.title LIKE ? OR v.vin LIKE ? OR v.stock_number LIKE ? OR v.model LIKE ?)")
+        filters.append("(v.title LIKE %s OR v.vin LIKE %s OR v.stock_number LIKE %s OR v.model LIKE %s)")
         s = f"%{search}%"
         params.extend([s, s, s, s])
     if three_row:
-        placeholders = ",".join(["?"] * len(_THREE_ROW_MODELS))
+        placeholders = ",".join(["%s"] * len(_THREE_ROW_MODELS))
         filters.append(f"UPPER(v.model) IN ({placeholders})")
         params.extend(m.upper() for m in _THREE_ROW_MODELS)
 
@@ -588,8 +612,9 @@ def get_vehicles(
         ORDER BY v.make, v.year DESC, v.model
     """
     with _conn() as c:
-        rows = c.execute(sql, params).fetchall()
-    return [dict(r) for r in rows]
+        c.execute(sql, params)
+        rows = c.fetchall()
+    return [dict(r) for r in rows] if rows else []
 
 
 def get_comparable_vehicles(vin: str, limit: int = 8) -> list[dict]:
@@ -598,32 +623,33 @@ def get_comparable_vehicles(vin: str, limit: int = 8) -> list[dict]:
     excluding the vehicle itself. Used for market comparison and duplicate detection.
     """
     with _conn() as c:
-        target = c.execute("SELECT make, model, year, trim FROM vehicles WHERE vin=?", (vin,)).fetchone()
+        c.execute("SELECT make, model, year, trim FROM vehicles WHERE vin=%s", (vin,))
+        target = c.fetchone()
         if not target:
             return []
-        rows = c.execute("""
+        c.execute("""
             SELECT
                 vin, title, year, make, model, trim, condition, body_style,
                 mileage, exterior_color, image_url, link,
                 COALESCE(price_override, price_dollars) AS effective_price,
                 price_override, price_dollars, market_value, is_active
             FROM vehicles
-            WHERE make = ?
-              AND model = ?
-              AND vin != ?
+            WHERE make = %s
+              AND model = %s
+              AND vin != %s
               AND is_active = 1
-              AND (? IS NULL OR ABS(year - ?) <= 4)
-            ORDER BY ABS(year - COALESCE(?,0)) ASC, year DESC
-            LIMIT ?
+              AND (year IS NULL OR ABS(year - %s) <= 4)
+            ORDER BY ABS(year - COALESCE(%s,0)) ASC, year DESC
+            LIMIT %s
         """, (
             target["make"], target["model"], vin,
-            target["year"], target["year"],
-            target["year"], limit,
-        )).fetchall()
+            target["year"], target["year"], limit,
+        ))
+        rows = c.fetchall()
+
     results = []
     for r in rows:
         d = dict(r)
-        # Flag near-duplicates: same year + trim
         d["is_near_duplicate"] = (
             r["year"] == target["year"] and
             (r["trim"] or "").lower() == (target["trim"] or "").lower()
@@ -634,27 +660,45 @@ def get_comparable_vehicles(vin: str, limit: int = 8) -> list[dict]:
 
 def get_summary(addendum: int = 0) -> dict:
     with _conn() as c:
-        total   = c.execute("SELECT COUNT(*) FROM vehicles WHERE is_active=1").fetchone()[0]
-        priced  = c.execute("SELECT COUNT(*) FROM vehicles WHERE is_active=1 AND (price_override IS NOT NULL OR price_dollars IS NOT NULL)").fetchone()[0]
-        avg_row = c.execute("""
+        c.execute("SELECT COUNT(*) FROM vehicles WHERE is_active=1")
+        total = c.fetchone()[0]
+
+        c.execute("SELECT COUNT(*) FROM vehicles WHERE is_active=1 AND (price_override IS NOT NULL OR price_dollars IS NOT NULL)")
+        priced = c.fetchone()[0]
+
+        c.execute("""
             SELECT AVG(COALESCE(price_override, price_dollars))
             FROM vehicles
             WHERE is_active=1 AND (price_override IS NOT NULL OR price_dollars IS NOT NULL)
-        """).fetchone()
-        avg_p   = round(avg_row[0] or 0)
+        """)
+        avg_row = c.fetchone()
+        avg_p = round(avg_row[0] or 0)
 
-        makes_rows  = c.execute("SELECT make, COUNT(*) cnt FROM vehicles WHERE is_active=1 AND make!='' GROUP BY make ORDER BY cnt DESC").fetchall()
-        bodies_rows = c.execute("SELECT body_style, COUNT(*) cnt FROM vehicles WHERE is_active=1 AND body_style!='' GROUP BY body_style ORDER BY cnt DESC").fetchall()
-        years_rows  = c.execute("SELECT year, COUNT(*) cnt FROM vehicles WHERE is_active=1 AND year IS NOT NULL GROUP BY year ORDER BY year DESC").fetchall()
-        with_mv     = c.execute("SELECT COUNT(*) FROM vehicles WHERE is_active=1 AND market_value IS NOT NULL").fetchone()[0]
+        c.execute("SELECT make, COUNT(*) cnt FROM vehicles WHERE is_active=1 AND make!='' GROUP BY make ORDER BY cnt DESC")
+        makes_rows = c.fetchall()
 
-        last_run  = c.execute("SELECT run_at, success, vehicles_found, vehicles_uploaded FROM sync_runs ORDER BY id DESC LIMIT 1").fetchone()
-        stats_s   = c.execute("""
+        c.execute("SELECT body_style, COUNT(*) cnt FROM vehicles WHERE is_active=1 AND body_style!='' GROUP BY body_style ORDER BY cnt DESC")
+        bodies_rows = c.fetchall()
+
+        c.execute("SELECT year, COUNT(*) cnt FROM vehicles WHERE is_active=1 AND year IS NOT NULL GROUP BY year ORDER BY year DESC")
+        years_rows = c.fetchall()
+
+        c.execute("SELECT COUNT(*) FROM vehicles WHERE is_active=1 AND market_value IS NOT NULL")
+        with_mv = c.fetchone()[0]
+
+        c.execute("SELECT run_at, success, vehicles_found, vehicles_uploaded FROM sync_runs ORDER BY id DESC LIMIT 1")
+        last_run = c.fetchone()
+
+        c.execute("""
             SELECT COALESCE(SUM(clicks),0), COALESCE(SUM(impressions),0), COALESCE(SUM(saves),0)
             FROM vehicle_stats
             WHERE stat_date = (SELECT MAX(stat_date) FROM vehicle_stats)
-        """).fetchone()
-        stats_date = c.execute("SELECT MAX(stat_date) FROM vehicle_stats").fetchone()[0]
+        """)
+        stats_s = c.fetchone()
+
+        c.execute("SELECT MAX(stat_date) FROM vehicle_stats")
+        stats_date_row = c.fetchone()
+        stats_date = stats_date_row[0] if stats_date_row else None
 
     return {
         "total_active":            total,
@@ -668,56 +712,59 @@ def get_summary(addendum: int = 0) -> dict:
         "total_impressions":       stats_s[1] if stats_s else 0,
         "total_saves":             stats_s[2] if stats_s else 0,
         "stats_date":              stats_date,
-        "makes_breakdown":         {r["make"]: r["cnt"]       for r in makes_rows},
-        "body_breakdown":          {r["body_style"]: r["cnt"] for r in bodies_rows},
-        "years_breakdown":         {str(r["year"]): r["cnt"]  for r in years_rows},
-        "last_sync_at":            last_run["run_at"]            if last_run else None,
-        "last_sync_ok":            bool(last_run["success"])     if last_run else None,
-        "last_sync_count":         last_run["vehicles_found"]    if last_run else 0,
+        "makes_breakdown":         {r["make"]: r["cnt"] for r in makes_rows} if makes_rows else {},
+        "body_breakdown":          {r["body_style"]: r["cnt"] for r in bodies_rows} if bodies_rows else {},
+        "years_breakdown":         {str(r["year"]): r["cnt"] for r in years_rows} if years_rows else {},
+        "last_sync_at":            last_run["run_at"] if last_run else None,
+        "last_sync_ok":            bool(last_run["success"]) if last_run else None,
+        "last_sync_count":         last_run["vehicles_found"] if last_run else 0,
         "last_sync_uploaded":      last_run["vehicles_uploaded"] if last_run else 0,
     }
 
 
 def get_sync_runs(limit: int = 20) -> list[dict]:
     with _conn() as c:
-        rows = c.execute("SELECT * FROM sync_runs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-    return [dict(r) for r in rows]
+        c.execute("SELECT * FROM sync_runs ORDER BY id DESC LIMIT %s", (limit,))
+        rows = c.fetchall()
+    return [dict(r) for r in rows] if rows else []
 
 
 def get_makes() -> list[str]:
     with _conn() as c:
-        rows = c.execute("SELECT DISTINCT make FROM vehicles WHERE is_active=1 AND make!='' ORDER BY make").fetchall()
-    return [r["make"] for r in rows]
-
+        c.execute("SELECT DISTINCT make FROM vehicles WHERE is_active=1 AND make!='' ORDER BY make")
+        rows = c.fetchall()
+    return [r["make"] for r in rows] if rows else []
 
 
 def get_deal_history(limit: int = 100) -> list[dict]:
     """Best-effort sold/deal history based on units no longer active in feed."""
     with _conn() as c:
-        rows = c.execute("""
+        c.execute("""
             SELECT
                 vin, stock_number, year, make, model, trim,
                 COALESCE(price_override, price_dollars) AS sold_price,
                 first_seen, last_seen,
-                CAST((julianday(last_seen) - julianday(first_seen)) AS INTEGER) AS days_listed
+                EXTRACT(DAY FROM last_seen - first_seen) AS days_listed
             FROM vehicles
             WHERE is_active = 0
             ORDER BY last_seen DESC
-            LIMIT ?
-        """, (limit,)).fetchall()
+            LIMIT %s
+        """, (limit,))
+        rows = c.fetchall()
 
-        bench_rows = c.execute("""
+        c.execute("""
             SELECT make, model,
-                   ROUND(AVG(CAST((julianday(last_seen) - julianday(first_seen)) AS INTEGER)), 1) AS avg_days,
+                   ROUND(AVG(EXTRACT(DAY FROM last_seen - first_seen)), 1) AS avg_days,
                    ROUND(AVG(COALESCE(price_override, price_dollars)), 0) AS avg_price
             FROM vehicles
             WHERE is_active = 0
               AND first_seen IS NOT NULL
               AND last_seen IS NOT NULL
             GROUP BY make, model
-        """).fetchall()
+        """)
+        bench_rows = c.fetchall()
 
-    benchmarks = {(r["make"], r["model"]): {"avg_days": r["avg_days"], "avg_price": r["avg_price"]} for r in bench_rows}
+    benchmarks = {(r["make"], r["model"]): {"avg_days": r["avg_days"], "avg_price": r["avg_price"]} for r in bench_rows} if bench_rows else {}
 
     out = []
     for r in rows:
@@ -727,10 +774,12 @@ def get_deal_history(limit: int = 100) -> list[dict]:
         out.append(d)
     return out
 
+
 def get_years() -> list[int]:
     with _conn() as c:
-        rows = c.execute("SELECT DISTINCT year FROM vehicles WHERE is_active=1 AND year IS NOT NULL ORDER BY year DESC").fetchall()
-    return [r["year"] for r in rows]
+        c.execute("SELECT DISTINCT year FROM vehicles WHERE is_active=1 AND year IS NOT NULL ORDER BY year DESC")
+        rows = c.fetchall()
+    return [r["year"] for r in rows] if rows else []
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -740,13 +789,14 @@ def save_deal(deal: dict) -> int:
     """Insert a saved pencil deal. Returns the new row id."""
     now = datetime.utcnow().isoformat(timespec="seconds")
     with _conn() as c:
-        cur = c.execute("""
+        c.execute("""
             INSERT INTO deals
                 (vin, created_at, created_by, customer_name,
                  base_price, addendum_amount, tax_rate, doc_fee,
                  down_payment, apr, term_months,
                  out_the_door, amount_financed, monthly_payment, gross, notes)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
         """, (
             deal.get("vin", ""),
             now,
@@ -765,104 +815,95 @@ def save_deal(deal: dict) -> int:
             deal.get("gross"),
             deal.get("notes", ""),
         ))
-    return cur.lastrowid
+        return c.fetchone()[0]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MarketCheck cache helpers
+# Cache helpers (using PostgreSQL directly, no RavenDB)
 # ─────────────────────────────────────────────────────────────────────────────
 _COMPS_TTL_HOURS = 24
 
 
 def get_comps_cache(cache_key: str) -> list | None:
-    """Return cached listings if fresh (< 24 h old), else None. Uses RavenDB with SQLite fallback."""
-    # Try RavenDB first, then fall back to SQLite
-    def _sqlite_fallback(key: str) -> list | None:
-        with _conn() as c:
-            row = c.execute(
-                "SELECT data, fetched_at FROM comps_cache WHERE cache_key=?",
-                (key,)
-            ).fetchone()
-        if not row:
-            return None
-        fetched = datetime.fromisoformat(row["fetched_at"])
-        age_h = (datetime.now(timezone.utc).replace(tzinfo=None) - fetched).total_seconds() / 3600
-        if age_h > _COMPS_TTL_HOURS:
-            return None
-        return json.loads(row["data"])
-
-    return ravendb_cache.get_comps_cache(cache_key, fallback_fn=_sqlite_fallback)
+    """Return cached listings if fresh (< 24 h old), else None."""
+    with _conn() as c:
+        c.execute(
+            "SELECT data, fetched_at FROM comps_cache WHERE cache_key=%s",
+            (cache_key,)
+        )
+        row = c.fetchone()
+    if not row:
+        return None
+    fetched = datetime.fromisoformat(str(row["fetched_at"]))
+    age_h = (datetime.now(timezone.utc).replace(tzinfo=None) - fetched).total_seconds() / 3600
+    if age_h > _COMPS_TTL_HOURS:
+        return None
+    return json.loads(row["data"])
 
 
 def set_comps_cache(cache_key: str, listings: list) -> None:
-    """Cache listings in RavenDB with SQLite fallback."""
-    def _sqlite_fallback(key: str, data: list) -> None:
-        now = datetime.utcnow().isoformat()
-        with _conn() as c:
-            c.execute(
-                """INSERT INTO comps_cache (cache_key, data, fetched_at) VALUES (?,?,?)
-                   ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at""",
-                (key, json.dumps(data), now)
-            )
-
-    ravendb_cache.set_comps_cache(cache_key, listings, fallback_fn=_sqlite_fallback)
+    """Cache listings in PostgreSQL."""
+    now = datetime.utcnow().isoformat()
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO comps_cache (cache_key, data, fetched_at) VALUES (%s,%s,%s)
+               ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at""",
+            (cache_key, json.dumps(listings), now)
+        )
 
 
 def get_vin_cache(vin: str) -> dict | None:
-    """Return cached VIN decode + sticker data, or None if not found. Uses RavenDB with SQLite fallback."""
-    def _sqlite_fallback(v: str) -> dict | None:
-        with _conn() as c:
-            row = c.execute(
-                "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?",
-                (v,)
-            ).fetchone()
-        if not row:
-            return None
-        return {"specs": json.loads(row["specs_json"]), "sticker_url": row["sticker_url"]}
-
-    return ravendb_cache.get_vin_cache(vin, fallback_fn=_sqlite_fallback)
+    """Return cached VIN decode + sticker data, or None if not found."""
+    with _conn() as c:
+        c.execute(
+            "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=%s",
+            (vin,)
+        )
+        row = c.fetchone()
+    if not row:
+        return None
+    return {"specs": json.loads(row["specs_json"]), "sticker_url": row["sticker_url"]}
 
 
 def set_vin_cache(vin: str, specs: list | None = None, sticker_url: str | None = None) -> None:
-    """Upsert VIN cache; only updates fields that are provided. Uses RavenDB with SQLite fallback."""
-    def _sqlite_fallback(v: str, s: list | None = None, u: str | None = None) -> None:
-        with _conn() as c:
-            existing = c.execute(
-                "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=?", (v,)
-            ).fetchone()
-            now = datetime.utcnow().isoformat()
-            if existing:
-                new_specs = json.dumps(s) if s is not None else existing["specs_json"]
-                new_sticker = u if u is not None else existing["sticker_url"]
-                c.execute(
-                    "UPDATE vin_cache SET specs_json=?, sticker_url=?, fetched_at=? WHERE vin=?",
-                    (new_specs, new_sticker, now, v)
-                )
-            else:
-                c.execute(
-                    "INSERT INTO vin_cache (vin, specs_json, sticker_url, fetched_at) VALUES (?,?,?,?)",
-                    (v, json.dumps(s or []), u or "", now)
-                )
-
-    ravendb_cache.set_vin_cache(vin, specs, sticker_url, fallback_fn=_sqlite_fallback)
+    """Upsert VIN cache; only updates fields that are provided."""
+    with _conn() as c:
+        c.execute(
+            "SELECT specs_json, sticker_url FROM vin_cache WHERE vin=%s", (vin,)
+        )
+        existing = c.fetchone()
+        now = datetime.utcnow().isoformat()
+        if existing:
+            new_specs = json.dumps(specs) if specs is not None else existing["specs_json"]
+            new_sticker = sticker_url if sticker_url is not None else existing["sticker_url"]
+            c.execute(
+                "UPDATE vin_cache SET specs_json=%s, sticker_url=%s, fetched_at=%s WHERE vin=%s",
+                (new_specs, new_sticker, now, vin)
+            )
+        else:
+            c.execute(
+                "INSERT INTO vin_cache (vin, specs_json, sticker_url, fetched_at) VALUES (%s,%s,%s,%s)",
+                (vin, json.dumps(specs or []), sticker_url or "", now)
+            )
 
 
 def get_deals(vin: str = "", limit: int = 50) -> list[dict]:
     """Return saved deals, optionally filtered by VIN, newest first."""
     with _conn() as c:
         if vin:
-            rows = c.execute("""
+            c.execute("""
                 SELECT d.*, v.year, v.make, v.model, v.trim, v.stock_number
                 FROM deals d
                 LEFT JOIN vehicles v ON v.vin = d.vin
-                WHERE d.vin = ?
-                ORDER BY d.id DESC LIMIT ?
-            """, (vin, limit)).fetchall()
+                WHERE d.vin = %s
+                ORDER BY d.id DESC LIMIT %s
+            """, (vin, limit))
         else:
-            rows = c.execute("""
+            c.execute("""
                 SELECT d.*, v.year, v.make, v.model, v.trim, v.stock_number
                 FROM deals d
                 LEFT JOIN vehicles v ON v.vin = d.vin
-                ORDER BY d.id DESC LIMIT ?
-            """, (limit,)).fetchall()
-    return [dict(r) for r in rows]
+                ORDER BY d.id DESC LIMIT %s
+            """, (limit,))
+        rows = c.fetchall()
+    return [dict(r) for r in rows] if rows else []
