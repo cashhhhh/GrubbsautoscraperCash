@@ -27,6 +27,10 @@ def _verify_password(password: str, hashed: str) -> bool:
     return _bcrypt.checkpw(password.encode(), hashed.encode())
 
 DB_PATH = os.getenv("DB_PATH", "inventory.db")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://neondb_owner:npg_8fsAWx1iHPOv@ep-quiet-queen-aezc7x9v-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
