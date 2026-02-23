@@ -22,8 +22,8 @@ def init_ravendb() -> bool:
     document_store_cls = _load_document_store()
 
     if not document_store_cls:
-        print("[RavenDB] Python client not importable; using SQLite fallback")
-        print("           Ensure build installs: pyravendb==5.0.0.5")
+        print("[RavenDB] Python client not available; using SQLite fallback")
+        print("           Install with: pip install pyravendb==5.0.0.5")
         return False
 
     server_url = os.getenv(
@@ -68,24 +68,12 @@ def _load_document_store():
     if DocumentStore:
         return DocumentStore
 
-    module_candidates = (
-        "ravendb",
-        "pyravendb",
-        "ravendb.documents.store.document_store",
-        "pyravendb.store.document_store",
-    )
+    try:
+        module = importlib.import_module("ravendb")
+        DocumentStore = getattr(module, "DocumentStore", None)
+    except Exception:
+        DocumentStore = None
 
-    for module_name in module_candidates:
-        try:
-            module = importlib.import_module(module_name)
-            document_store_cls = getattr(module, "DocumentStore", None)
-            if document_store_cls:
-                DocumentStore = document_store_cls
-                return DocumentStore
-        except Exception:
-            continue
-
-    DocumentStore = None
     return DocumentStore
 
 
