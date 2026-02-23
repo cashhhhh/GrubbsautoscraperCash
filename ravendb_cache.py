@@ -47,17 +47,61 @@ def init_ravendb() -> bool:
             _store.auth_options.username = username
             _store.auth_options.password = password
 
-        _store.initialize()
 
-        # Test connection
-        with _store.open_session() as session:
-            session.query(object_type=object).first()
+def _http_auth(http_store: dict):
+    if http_store.get("username") and http_store.get("password"):
+        return (http_store["username"], http_store["password"])
+    return None
 
-        print(f"[RavenDB] Connected to {server_url}/{database}")
+
+def _http_verify(http_store: dict):
+    if http_store.get("cert_path"):
+        return http_store["cert_path"]
+    return True
+
+
+def _http_get_doc(doc_id: str) -> Optional[dict]:
+    if not _is_http_store():
+        return None
+
+    try:
+        response = requests.get(
+            _docs_url(_store),
+            params={"id": doc_id},
+            timeout=8,
+            auth=_http_auth(_store),
+            verify=_http_verify(_store),
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        payload = response.json()
+
+        if "Results" in payload and payload["Results"]:
+            return payload["Results"][0]
+        return None
+    except Exception as e:
+        print(f"[RavenDB] HTTP get error: {e}")
+        return None
+
+
+def _http_put_doc(doc_id: str, doc: dict) -> bool:
+    if not _is_http_store():
+        return False
+
+    try:
+        response = requests.put(
+            _docs_url(_store),
+            params={"id": doc_id},
+            json=doc,
+            timeout=8,
+            auth=_http_auth(_store),
+            verify=_http_verify(_store),
+        )
+        response.raise_for_status()
         return True
     except Exception as e:
-        print(f"[RavenDB] Connection failed: {e}. Using SQLite fallback.")
-        _store = None
+        print(f"[RavenDB] HTTP put error: {e}")
         return False
 
 
@@ -82,7 +126,7 @@ def get_comps_cache(cache_key: str, fallback_fn=None) -> Optional[list]:
     Get cached listings from RavenDB (with 24h TTL).
     Falls back to SQLite function if provided and RavenDB unavailable.
     """
-    if _store:
+    if _store and not _is_http_store():
         try:
             with _store.open_session() as session:
                 doc = session.query(object_type=dict).where_equals("id", cache_key).first()
@@ -100,6 +144,17 @@ def get_comps_cache(cache_key: str, fallback_fn=None) -> Optional[list]:
         except Exception as e:
             print(f"[RavenDB] get_comps_cache error: {e}")
 
+    if _is_http_store():
+        doc = _http_get_doc(cache_key)
+        if doc:
+            try:
+                fetched = datetime.fromisoformat(doc.get("fetched_at", ""))
+                age_h = (datetime.now(timezone.utc).replace(tzinfo=None) - fetched).total_seconds() / 3600
+                if age_h <= _COMPS_TTL_HOURS:
+                    return doc.get("data", [])
+            except Exception:
+                return None
+
     # Fallback to SQLite
     if fallback_fn:
         return fallback_fn(cache_key)
@@ -111,7 +166,7 @@ def set_comps_cache(cache_key: str, listings: list, fallback_fn=None) -> None:
     Cache listings in RavenDB.
     Falls back to SQLite function if provided and RavenDB unavailable.
     """
-    if _store:
+    if _store and not _is_http_store():
         try:
             with _store.open_session() as session:
                 doc = {
@@ -126,6 +181,16 @@ def set_comps_cache(cache_key: str, listings: list, fallback_fn=None) -> None:
         except Exception as e:
             print(f"[RavenDB] set_comps_cache error: {e}")
 
+    if _is_http_store():
+        doc = {
+            "id": cache_key,
+            "data": listings,
+            "fetched_at": datetime.utcnow().isoformat(),
+            "@metadata": {"@collection": "CompsCache"}
+        }
+        if _http_put_doc(cache_key, doc):
+            return
+
     # Fallback to SQLite
     if fallback_fn:
         fallback_fn(cache_key, listings)
@@ -136,7 +201,7 @@ def get_vin_cache(vin: str, fallback_fn=None) -> Optional[dict]:
     Get cached VIN specs from RavenDB.
     Falls back to SQLite function if provided and RavenDB unavailable.
     """
-    if _store:
+    if _store and not _is_http_store():
         try:
             with _store.open_session() as session:
                 doc = session.query(object_type=dict).where_equals("id", f"vin_{vin}").first()
@@ -151,6 +216,14 @@ def get_vin_cache(vin: str, fallback_fn=None) -> Optional[dict]:
         except Exception as e:
             print(f"[RavenDB] get_vin_cache error: {e}")
 
+    if _is_http_store():
+        doc = _http_get_doc(f"vin_{vin}")
+        if doc:
+            return {
+                "specs": doc.get("specs", []),
+                "sticker_url": doc.get("sticker_url", "")
+            }
+
     # Fallback to SQLite
     if fallback_fn:
         return fallback_fn(vin)
@@ -162,7 +235,7 @@ def set_vin_cache(vin: str, specs: Optional[list] = None, sticker_url: Optional[
     Cache VIN specs in RavenDB.
     Falls back to SQLite function if provided and RavenDB unavailable.
     """
-    if _store:
+    if _store and not _is_http_store():
         try:
             with _store.open_session() as session:
                 doc_id = f"vin_{vin}"
@@ -190,6 +263,29 @@ def set_vin_cache(vin: str, specs: Optional[list] = None, sticker_url: Optional[
             return
         except Exception as e:
             print(f"[RavenDB] set_vin_cache error: {e}")
+
+    if _is_http_store():
+        doc_id = f"vin_{vin}"
+        existing = _http_get_doc(doc_id) or {}
+        if not existing:
+            existing = {
+                "id": doc_id,
+                "vin": vin,
+                "fetched_at": datetime.utcnow().isoformat(),
+                "@metadata": {"@collection": "VinCache"}
+            }
+        if specs is not None:
+            existing["specs"] = specs
+        elif "specs" not in existing:
+            existing["specs"] = []
+
+        if sticker_url is not None:
+            existing["sticker_url"] = sticker_url
+        elif "sticker_url" not in existing:
+            existing["sticker_url"] = ""
+
+        if _http_put_doc(doc_id, existing):
+            return
 
     # Fallback to SQLite
     if fallback_fn:
