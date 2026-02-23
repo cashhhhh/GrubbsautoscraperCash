@@ -63,7 +63,7 @@ def init_db() -> None:
     """Initialize database schema."""
     with _conn() as c:
         # Create extensions
-        c.execute("CREATE EXTENSION IF NOT EXISTS uuid-ossp;")
+        c.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
 
         # Create tables
         c.execute("""
