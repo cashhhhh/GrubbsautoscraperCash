@@ -13,6 +13,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from contextlib import asynccontextmanager
 from typing import Optional
 
 import secrets
@@ -43,17 +44,22 @@ db.init_db()
 
 _SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 
-app = FastAPI(title="Grubbs INFINITI — Marketplace Dashboard", docs_url=None, redoc_url=None)
+app = FastAPI(
+    title="Grubbs INFINITI — Marketplace Dashboard",
+    docs_url=None,
+    redoc_url=None,
+    lifespan=lifespan
+)
 app.add_middleware(SessionMiddleware, secret_key=_SECRET_KEY, session_cookie="grubbs_session", max_age=86400 * 7)
 
 _LOGIN_TEMPLATE = Path(__file__).parent / "templates" / "login.html"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Startup event — log connection status
+# Lifespan — log connection status on startup
 # ─────────────────────────────────────────────────────────────────────────────
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Log database and cache connection status on startup."""
     import ravendb_cache
     if ravendb_cache._store:
@@ -64,6 +70,7 @@ async def startup_event():
             print(f"   Note: RAVENDB_URL is set but connection failed. Check credentials.")
         else:
             print(f"   Note: No RAVENDB_URL env var found. Set env vars to enable RavenDB.")
+    yield
 
 
 # ─────────────────────────────────────────────────────────────────────────────
