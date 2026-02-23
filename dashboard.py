@@ -44,16 +44,6 @@ db.init_db()
 
 _SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 
-app = FastAPI(
-    title="Grubbs INFINITI — Marketplace Dashboard",
-    docs_url=None,
-    redoc_url=None,
-    lifespan=lifespan
-)
-app.add_middleware(SessionMiddleware, secret_key=_SECRET_KEY, session_cookie="grubbs_session", max_age=86400 * 7)
-
-_LOGIN_TEMPLATE = Path(__file__).parent / "templates" / "login.html"
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Lifespan — log connection status on startup
@@ -71,6 +61,17 @@ async def lifespan(app: FastAPI):
         else:
             print(f"   Note: No RAVENDB_URL env var found. Set env vars to enable RavenDB.")
     yield
+
+
+app = FastAPI(
+    title="Grubbs INFINITI — Marketplace Dashboard",
+    docs_url=None,
+    redoc_url=None,
+    lifespan=lifespan
+)
+app.add_middleware(SessionMiddleware, secret_key=_SECRET_KEY, session_cookie="grubbs_session", max_age=86400 * 7)
+
+_LOGIN_TEMPLATE = Path(__file__).parent / "templates" / "login.html"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
