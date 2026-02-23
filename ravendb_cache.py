@@ -8,8 +8,6 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
-import requests
-
 DocumentStore = None
 
 
@@ -21,105 +19,33 @@ def init_ravendb() -> bool:
     """Initialize RavenDB connection. Returns True if successful."""
     global _store
 
-    server_url = os.getenv(
-        "RAVENDB_URL",
-        "https://a.free.cashmcccombs.ravendb.cloud"
-    ).strip()
-    database = os.getenv("RAVENDB_DATABASE", "cashdashboard").strip()
-    cert_path = os.getenv("RAVENDB_CERT_PATH", "").strip()
-    username = os.getenv("RAVENDB_USERNAME", "Cashmccombs@gmail.com").strip()
-    password = os.getenv("RAVENDB_PASSWORD", "Cash1345").strip()
-
     document_store_cls = _load_document_store()
-    if document_store_cls:
-        try:
-            _store = document_store_cls(urls=[server_url], database=database)
-            _store.conventions.disable_topology_updates = True
 
-            if cert_path:
-                _store.auth_options.certificate = cert_path
-            if username and password:
-                _store.auth_options.username = username
-                _store.auth_options.password = password
-
-            _store.initialize()
-            with _store.open_session() as session:
-                session.query(object_type=object).first()
-
-            print(f"[RavenDB] Connected via python client to {server_url}/{database}")
-            return True
-        except Exception as e:
-            print(f"[RavenDB] Python client connection failed: {e}")
-
-    # HTTP API fallback if python client is missing/broken.
-    http_store = {
-        "kind": "http",
-        "server_url": server_url.rstrip("/"),
-        "database": database,
-        "username": username,
-        "password": password,
-        "cert_path": cert_path,
-    }
-
-    if _probe_http_store(http_store):
-        _store = http_store
-        print(f"[RavenDB] Connected via HTTP API to {server_url}/{database}")
-        return True
-
-    _store = None
-    print("[RavenDB] Connection unavailable. Using SQLite fallback.")
-    return False
-
-
-def _probe_http_store(http_store: dict) -> bool:
-    try:
-        response = requests.get(
-            _docs_url(http_store),
-            params={"start": 0, "pageSize": 1},
-            timeout=5,
-            auth=_http_auth(http_store),
-            verify=_http_verify(http_store),
-        )
-        return response.status_code < 400
-    except Exception as e:
-        print(f"[RavenDB] HTTP probe failed: {e}")
+    if not document_store_cls:
+        print("[RavenDB] Python client not available; using SQLite fallback")
+        print("           Install with: pip install pyravendb==5.0.0.5")
         return False
 
+    server_url = os.getenv(
+            "RAVENDB_URL",
+            "https://a.free.cashmcccombs.ravendb.cloud"
+        ).strip()
+    database = os.getenv("RAVENDB_DATABASE", "cashdashboard").strip()
 
-def _load_document_store():
-    """Load RavenDB DocumentStore lazily so environments can install dependencies later."""
-    global DocumentStore
+    try:
+        _store = document_store_cls(urls=[server_url], database=database)
 
-    if DocumentStore:
-        return DocumentStore
+        # Authentication
+        _store.conventions.disable_topology_updates = True
+        cert_path = os.getenv("RAVENDB_CERT_PATH", "").strip()
+        username = os.getenv("RAVENDB_USERNAME", "Cashmccombs@gmail.com").strip()
+        password = os.getenv("RAVENDB_PASSWORD", "Cash1345").strip()
 
-    module_candidates = (
-        "ravendb",
-        "pyravendb",
-        "ravendb.documents.store.document_store",
-        "pyravendb.store.document_store",
-    )
-
-    for module_name in module_candidates:
-        try:
-            module = importlib.import_module(module_name)
-            document_store_cls = getattr(module, "DocumentStore", None)
-            if document_store_cls:
-                DocumentStore = document_store_cls
-                return DocumentStore
-        except Exception:
-            continue
-
-    DocumentStore = None
-    return DocumentStore
-
-
-def _is_http_store() -> bool:
-    return isinstance(_store, dict) and _store.get("kind") == "http"
-
-
-def _docs_url(http_store: dict) -> str:
-    return f"{http_store['server_url']}/databases/{http_store['database']}/docs"
+        if cert_path:
+            _store.auth_options.certificate = cert_path
+        if username and password:
+            _store.auth_options.username = username
+            _store.auth_options.password = password
 
 
 def _http_auth(http_store: dict):
@@ -177,6 +103,22 @@ def _http_put_doc(doc_id: str, doc: dict) -> bool:
     except Exception as e:
         print(f"[RavenDB] HTTP put error: {e}")
         return False
+
+
+def _load_document_store():
+    """Load RavenDB DocumentStore lazily so environments can install dependencies later."""
+    global DocumentStore
+
+    if DocumentStore:
+        return DocumentStore
+
+    try:
+        module = importlib.import_module("ravendb")
+        DocumentStore = getattr(module, "DocumentStore", None)
+    except Exception:
+        DocumentStore = None
+
+    return DocumentStore
 
 
 def get_comps_cache(cache_key: str, fallback_fn=None) -> Optional[list]:
