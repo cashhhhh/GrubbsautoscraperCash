@@ -1298,6 +1298,10 @@
                   <label class="block text-xs font-semibold text-slate-600 mb-1">Miles Max</label>
                   <input type="number" x-model.number="marketFilters.miles_max" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg" />
                 </div>
+                <div class="col-span-2">
+                  <label class="block text-xs font-semibold text-slate-600 mb-1">Trim</label>
+                  <input type="text" x-model="marketFilters.trim" placeholder="e.g., Luxury, Sport" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg" />
+                </div>
               </div>
 
               <button @click="loadMarketComps(marketFilters)" class="btn-primary text-xs w-full">
@@ -1864,7 +1868,7 @@ function dashboard() {
     marketSearch: null,
     marketError: '',
     marketFetched: false,
-    marketFilters: { year_min: null, year_max: null, miles_min: null, miles_max: null },
+    marketFilters: { year_min: null, year_max: null, miles_min: null, miles_max: null, trim: '' },
     marketVehicle: { year: null, miles: null },
     marketFilterOpen: false,
     loadingMarket: false,
@@ -2384,6 +2388,7 @@ function dashboard() {
         if (filters && filters.year_max != null) params.append('year_max', filters.year_max)
         if (filters && filters.miles_min != null) params.append('miles_min', filters.miles_min)
         if (filters && filters.miles_max != null) params.append('miles_max', filters.miles_max)
+        if (filters && filters.trim) params.append('trim', filters.trim)
         if (params.toString()) url += '?' + params.toString()
 
         const r = await fetch(url)
@@ -2393,7 +2398,7 @@ function dashboard() {
           this.marketOurPrice = d.our_price
           this.marketSearch  = d.search
           this.marketVehicle = d.vehicle || {}
-          this.marketFilters = d.filters || { year_min: null, year_max: null, miles_min: null, miles_max: null }
+          this.marketFilters = d.filters || { year_min: null, year_max: null, miles_min: null, miles_max: null, trim: '' }
           this.marketFetched = true
           // Update price war map for this VIN
           if (this.modal?.vin) {
