@@ -1455,6 +1455,11 @@
       <div>
         <h2 class="text-base font-bold text-slate-900">Pencil Desking Dashboard</h2>
         <p class="text-xs text-slate-400" x-text="pencilVehicle ? (pencilVehicle.year + ' ' + pencilVehicle.make + ' ' + pencilVehicle.model + ' · ' + (pencilVehicle.stock_number || pencilVehicle.vin)) : ''"></p>
+        <template x-if="pencilVehicle?.days_on_lot !== undefined">
+          <p class="text-xs mt-1"
+            :class="pencilVehicle.days_on_lot >= 90 ? 'text-red-600 font-semibold' : pencilVehicle.days_on_lot >= 60 ? 'text-amber-600 font-semibold' : 'text-slate-500'"
+            x-text="pencilVehicle.days_on_lot + ' days on lot'"></p>
+        </template>
       </div>
       <button @click="pencilDeskOpen=false" class="text-slate-400 hover:text-slate-700">
         <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
@@ -1512,6 +1517,45 @@
               </label>
             </div>
           </div>
+        </div>
+
+        <div class="bg-slate-50 rounded-xl p-4 space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">Trade-in Estimate</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="text-xs font-semibold text-slate-600">Trade-in Year
+              <input type="number" min="1990" max="2050" step="1" x-model.number="mockPencil.tradeInYear" placeholder="2020"
+                class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="text-xs font-semibold text-slate-600">Make
+              <input type="text" x-model="mockPencil.tradeInMake" placeholder="Honda"
+                class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="text-xs font-semibold text-slate-600">Model
+              <input type="text" x-model="mockPencil.tradeInModel" placeholder="Accord"
+                class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+            <label class="text-xs font-semibold text-slate-600">Miles
+              <input type="number" min="0" step="1000" x-model.number="mockPencil.tradeInMiles" placeholder="100000"
+                class="mt-1 w-full py-2 px-3 text-sm border border-slate-200 rounded-lg" />
+            </label>
+          </div>
+          <button @click="fetchTradeInValue()" class="btn-ghost text-xs w-full border border-slate-300"
+            x-text="loadingTradeIn ? 'Fetching estimate…' : 'Get Estimate'"
+            :disabled="!mockPencil.tradeInYear || !mockPencil.tradeInMake || !mockPencil.tradeInModel || loadingTradeIn"></button>
+          <template x-if="mockPencil.tradeInValue">
+            <div class="bg-blue-50 rounded-lg p-3 border border-blue-200">
+              <p class="text-xs text-slate-600">Estimated Trade-in Value</p>
+              <p class="text-lg font-bold text-blue-600" x-text="'$' + Number(mockPencil.tradeInValue).toLocaleString()"></p>
+              <p class="text-xs text-slate-500 mt-1" x-text="'Market avg: $' + Number(mockPencil.tradeInMarketValue).toLocaleString()"></p>
+            </div>
+          </template>
+          <template x-if="tradeInError">
+            <div class="bg-red-50 rounded-lg p-3 border border-red-200">
+              <p class="text-xs text-red-600" x-text="tradeInError"></p>
+            </div>
+          </template>
         </div>
 
         <div class="bg-slate-50 rounded-xl p-4 space-y-3">
@@ -1837,6 +1881,12 @@ function dashboard() {
       docFeeAmount: 225,
       cost: 0,
       pack: 0,
+      tradeInYear: null,
+      tradeInMake: '',
+      tradeInModel: '',
+      tradeInMiles: 0,
+      tradeInValue: 0,
+      tradeInMarketValue: 0,
     },
     aprPresets: [
       { label: 'Tier 1', sub: '750+ score', apr: 6.49 },
@@ -1884,6 +1934,9 @@ function dashboard() {
     stickerCached: false,
     loadingSticker: false,
     stickerError: '',
+    // trade-in calculator
+    loadingTradeIn: false,
+    tradeInError: '',
 
     get bodyStyles() {
       const set = new Set(this.vehicles.map(v => v.body_style).filter(Boolean))
@@ -2373,6 +2426,34 @@ function dashboard() {
       }
       this.dealSaving = false
       setTimeout(() => this.dealSaveMsg = '', 4000)
+    },
+
+    async fetchTradeInValue() {
+      if (!this.mockPencil.tradeInYear || !this.mockPencil.tradeInMake || !this.mockPencil.tradeInModel) {
+        this.tradeInError = 'Please enter year, make, and model'
+        return
+      }
+      this.loadingTradeIn = true
+      this.tradeInError = ''
+      try {
+        const params = new URLSearchParams({
+          year: this.mockPencil.tradeInYear,
+          make: this.mockPencil.tradeInMake,
+          model: this.mockPencil.tradeInModel,
+          miles: this.mockPencil.tradeInMiles || 0,
+        })
+        const r = await fetch('/api/trade-in-value?' + params.toString())
+        const d = await r.json()
+        if (r.ok) {
+          this.mockPencil.tradeInValue = d.trade_in_value
+          this.mockPencil.tradeInMarketValue = d.market_value
+        } else {
+          this.tradeInError = d.detail || 'Failed to get estimate'
+        }
+      } catch(e) {
+        this.tradeInError = 'Network error'
+      }
+      this.loadingTradeIn = false
     },
 
     async loadMarketComps(filters = null) {
