@@ -2377,6 +2377,7 @@ function dashboard() {
 
     async loadMarketComps(filters = null) {
       if (!this.modal?.vin) return
+      this.marketFilterOpen = true
       this.loadingMarket = true
       this.marketError = ''
       this.marketComps = []
