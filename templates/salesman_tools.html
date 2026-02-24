@@ -9,89 +9,104 @@
   <style>
     [x-cloak]{display:none!important}
     body{font-family:Inter,system-ui,sans-serif}
+    /* Mobile optimizations */
+    input, select, textarea {
+      font-size: 16px !important; /* Prevents zoom on iOS */
+      padding: 12px !important;
+    }
+    button {
+      min-height: 48px !important; /* Touch-friendly button size */
+      font-size: 16px !important;
+    }
+    /* Prevent text selection on buttons */
+    button { -webkit-user-select: none; user-select: none; }
+    /* Better scrolling on mobile */
+    .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+    /* Badge styling */
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; }
   </style>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-slate-100 min-h-screen" x-data="salesmanTools()" x-init="init()" x-cloak>
 
-<!-- Nav -->
+<!-- Nav - Mobile Responsive -->
 <div class="sticky top-0 bg-white shadow-sm border-b border-slate-200 z-10">
-  <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-    <h1 class="text-lg font-bold text-slate-800">⚡ Salesman Power Tools</h1>
-    <div class="text-xs text-slate-400" x-text="username"></div>
+  <div class="max-w-4xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between">
+    <h1 class="text-base sm:text-lg font-bold text-slate-800 truncate">⚡ Salesman Tools</h1>
+    <div class="text-xs sm:text-xs text-slate-400 ml-2 shrink-0" x-text="username"></div>
   </div>
 </div>
 
-<div class="max-w-4xl mx-auto px-4 py-6 space-y-4">
+<div class="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 pb-8">
 
-  <!-- Tab Navigation -->
-  <div class="flex gap-2 overflow-x-auto pb-2">
-    <button @click="tab='commission'" :class="tab==='commission'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-4 py-2 rounded-lg font-semibold text-sm shrink-0 transition">
-      💰 Commission
+  <!-- Tab Navigation - Mobile Optimized -->
+  <div class="flex gap-1 sm:gap-2 overflow-x-auto pb-2 -mx-3 sm:mx-0 px-3 sm:px-0">
+    <button @click="tab='commission'" :class="tab==='commission'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
+      💰 <span class="hidden sm:inline">Commission</span>
     </button>
-    <button @click="tab='payment'" :class="tab==='payment'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-4 py-2 rounded-lg font-semibold text-sm shrink-0 transition">
-      📊 Payment
+    <button @click="tab='payment'" :class="tab==='payment'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
+      📊 <span class="hidden sm:inline">Payment</span>
     </button>
-    <button @click="tab='beatthem'" :class="tab==='beatthem'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-4 py-2 rounded-lg font-semibold text-sm shrink-0 transition">
-      ⚔️ Beat Them
+    <button @click="tab='beatthem'" :class="tab==='beatthem'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
+      ⚔️ <span class="hidden sm:inline">Beat</span>
     </button>
-    <button @click="tab='killer'" :class="tab==='killer'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-4 py-2 rounded-lg font-semibold text-sm shrink-0 transition">
-      🎯 Deal Killer
+    <button @click="tab='killer'" :class="tab==='killer'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
+      🎯 <span class="hidden sm:inline">Killer</span>
     </button>
-    <button @click="tab='trade'" :class="tab==='trade'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-4 py-2 rounded-lg font-semibold text-sm shrink-0 transition">
-      🚗 Trade-In
+    <button @click="tab='trade'" :class="tab==='trade'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
+      🚗 <span class="hidden sm:inline">Trade</span>
     </button>
-    <button @click="tab='inventory'" :class="tab==='inventory'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-4 py-2 rounded-lg font-semibold text-sm shrink-0 transition">
-      📦 Inventory
+    <button @click="tab='inventory'" :class="tab==='inventory'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
+      📦 <span class="hidden sm:inline">Inv</span>
     </button>
   </div>
 
   <!-- COMMISSION CALCULATOR TAB -->
-  <div x-show="tab==='commission'" class="bg-white rounded-xl p-6 shadow-md space-y-4">
-    <h2 class="text-xl font-bold text-slate-800">Commission Calculator</h2>
-    <p class="text-sm text-slate-500">Calculate your commission instantly</p>
+  <div x-show="tab==='commission'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
+    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Commission Calculator</h2>
+    <p class="text-xs sm:text-sm text-slate-500">Calculate your commission instantly</p>
 
     <div class="space-y-3">
       <div>
-        <label class="block text-sm font-semibold text-slate-700 mb-1">Selling Price</label>
-        <input type="number" x-model.number="commission.basePrice" placeholder="28500" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Selling Price</label>
+        <input type="number" x-model.number="commission.basePrice" placeholder="28500" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Addendum</label>
-          <input type="number" x-model.number="commission.addendum" placeholder="1995" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Addendum</label>
+          <input type="number" x-model.number="commission.addendum" placeholder="1995" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Cost</label>
-          <input type="number" x-model.number="commission.cost" placeholder="22000" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Cost</label>
+          <input type="number" x-model.number="commission.cost" placeholder="22000" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Pack</label>
-          <input type="number" x-model.number="commission.pack" placeholder="500" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Pack</label>
+          <input type="number" x-model.number="commission.pack" placeholder="500" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Trade-In Value</label>
-          <input type="number" x-model.number="commission.tradeIn" placeholder="5000" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Trade-In</label>
+          <input type="number" x-model.number="commission.tradeIn" placeholder="5000" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
       </div>
-      <button @click="calculateCommission()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition">
+      <button @click="calculateCommission()" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition active:scale-95">
         Calculate
       </button>
     </div>
 
     <template x-if="commission.result">
-      <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-6 space-y-3">
+      <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-4 sm:p-6 space-y-3">
         <div class="text-center">
-          <p class="text-sm text-slate-600 font-semibold">YOUR COMMISSION</p>
-          <p class="text-4xl font-black text-green-700">$<span x-text="Number(commission.result.commission).toLocaleString()"></span></p>
+          <p class="text-xs sm:text-sm text-slate-600 font-semibold">YOUR COMMISSION</p>
+          <p class="text-3xl sm:text-4xl font-black text-green-700">$<span x-text="Number(commission.result.commission).toLocaleString()"></span></p>
         </div>
-        <div class="grid grid-cols-2 gap-3 text-sm">
-          <div class="bg-white rounded p-2">
+        <div class="grid grid-cols-2 gap-2 text-xs sm:text-sm">
+          <div class="bg-white rounded p-3">
             <p class="text-slate-500 text-xs">Gross Profit</p>
             <p class="font-bold text-slate-800">$<span x-text="Number(commission.result.gross).toLocaleString()"></span></p>
           </div>
-          <div class="bg-white rounded p-2">
+          <div class="bg-white rounded p-3">
             <p class="text-slate-500 text-xs">Margin</p>
             <p class="font-bold text-slate-800" x-text="commission.result.margin_pct.toFixed(1) + '%'"></p>
           </div>
@@ -101,41 +116,41 @@
   </div>
 
   <!-- PAYMENT ESTIMATOR TAB -->
-  <div x-show="tab==='payment'" class="bg-white rounded-xl p-6 shadow-md space-y-4">
-    <h2 class="text-xl font-bold text-slate-800">Payment Estimator</h2>
-    <p class="text-sm text-slate-500">Show customer their monthly payment instantly</p>
+  <div x-show="tab==='payment'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
+    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Payment Estimator</h2>
+    <p class="text-xs sm:text-sm text-slate-500">Show customer their monthly payment</p>
 
     <div class="space-y-3">
       <div>
-        <label class="block text-sm font-semibold text-slate-700 mb-1">Vehicle Price</label>
-        <input type="number" x-model.number="payment.price" placeholder="28500" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Vehicle Price</label>
+        <input type="number" x-model.number="payment.price" placeholder="28500" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Down Payment</label>
-          <input type="number" x-model.number="payment.downPayment" placeholder="3000" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Down Payment</label>
+          <input type="number" x-model.number="payment.downPayment" placeholder="3000" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">APR %</label>
-          <input type="number" x-model.number="payment.apr" placeholder="6.5" step="0.1" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">APR %</label>
+          <input type="number" x-model.number="payment.apr" placeholder="6.5" step="0.1" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Term (months)</label>
-          <select x-model.number="payment.months" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-            <option value="48">48 months</option>
-            <option value="60">60 months</option>
-            <option value="72">72 months</option>
-            <option value="84">84 months</option>
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Term</label>
+          <select x-model.number="payment.months" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+            <option value="48">48 mo</option>
+            <option value="60">60 mo</option>
+            <option value="72">72 mo</option>
+            <option value="84">84 mo</option>
           </select>
         </div>
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Doc Fee</label>
-          <input type="number" x-model.number="payment.docFee" placeholder="299" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Doc Fee</label>
+          <input type="number" x-model.number="payment.docFee" placeholder="299" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
       </div>
-      <button @click="calculatePayment()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition">
+      <button @click="calculatePayment()" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition active:scale-95">
         Calculate Payment
       </button>
     </div>
@@ -170,38 +185,38 @@
   </div>
 
   <!-- BEAT THEM TAB -->
-  <div x-show="tab==='beatthem'" class="bg-white rounded-xl p-6 shadow-md space-y-4">
-    <h2 class="text-xl font-bold text-slate-800">Beat Them</h2>
-    <p class="text-sm text-slate-500">Customer saw one cheaper? Find & crush competitors.</p>
+  <div x-show="tab==='beatthem'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
+    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Beat Them</h2>
+    <p class="text-xs sm:text-sm text-slate-500">Customer saw one cheaper? Find & crush competitors.</p>
 
     <div class="space-y-3 bg-slate-50 p-4 rounded-lg">
       <p class="text-xs font-semibold text-slate-600 mb-3">Competitor Vehicle</p>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Year</label>
-          <input type="number" x-model.number="beatThem.year" placeholder="2023" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+          <label class="block text-xs font-semibold text-slate-700 mb-2">Year</label>
+          <input type="number" x-model.number="beatThem.year" placeholder="2023" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Make</label>
-          <input type="text" x-model="beatThem.make" placeholder="INFINITI" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+          <label class="block text-xs font-semibold text-slate-700 mb-2">Make</label>
+          <input type="text" x-model="beatThem.make" placeholder="INFINITI" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Model</label>
-          <input type="text" x-model="beatThem.model" placeholder="Q5" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+          <label class="block text-xs font-semibold text-slate-700 mb-2">Model</label>
+          <input type="text" x-model="beatThem.model" placeholder="Q5" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Trim (optional)</label>
-          <input type="text" x-model="beatThem.trim" placeholder="Premium" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+          <label class="block text-xs font-semibold text-slate-700 mb-2">Trim</label>
+          <input type="text" x-model="beatThem.trim" placeholder="Premium" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
       </div>
       <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1">Our VIN (for comparison)</label>
-        <input type="text" x-model="beatThem.ourVin" placeholder="JTHBX1C26G..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+        <label class="block text-xs font-semibold text-slate-700 mb-2">Our VIN</label>
+        <input type="text" x-model="beatThem.ourVin" placeholder="JTHBX1C26G..." class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
       </div>
-      <button @click="findCompetitors()" :disabled="beatThemLoading" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
-        <span x-show="!beatThemLoading">Search Competitors</span>
+      <button @click="findCompetitors()" :disabled="beatThemLoading" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 active:scale-95">
+        <span x-show="!beatThemLoading">Search</span>
         <span x-show="beatThemLoading">Searching…</span>
       </button>
     </div>
@@ -211,32 +226,33 @@
       <div class="space-y-4">
         <!-- Summary Stats -->
         <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-4">
-          <div class="grid grid-cols-2 gap-3 text-sm">
-            <div class="bg-white rounded p-2">
+          <div class="grid grid-cols-2 gap-2 text-xs sm:text-sm">
+            <div class="bg-white rounded p-3">
               <p class="text-xs text-slate-500">Total Found</p>
-              <p class="text-2xl font-bold text-slate-800" x-text="beatThem.results.summary.total_found"></p>
+              <p class="text-xl sm:text-2xl font-bold text-slate-800" x-text="beatThem.results.summary.total_found"></p>
             </div>
-            <div class="bg-white rounded p-2">
-              <p class="text-xs text-slate-500">Market Avg</p>
-              <p class="text-lg font-bold text-slate-800">$<span x-text="Number(beatThem.results.summary.avg_competitor_price).toLocaleString()"></span></p>
+            <div class="bg-white rounded p-3">
+              <p class="text-xs text-slate-500">Avg Price</p>
+              <p class="text-base sm:text-lg font-bold text-slate-800">$<span x-text="Number(beatThem.results.summary.avg_competitor_price).toLocaleString()"></span></p>
             </div>
           </div>
 
           <template x-if="beatThem.results.our_vehicle && beatThem.results.our_vehicle.price">
             <div class="mt-3 pt-3 border-t border-red-200">
-              <p class="text-xs text-slate-600 mb-2">OUR VEHICLE VS MARKET</p>
-              <div class="flex items-center justify-between">
+              <p class="text-xs text-slate-600 mb-3 font-bold">OUR POSITION</p>
+              <div class="grid grid-cols-3 gap-2 text-center text-xs">
                 <div>
-                  <p class="text-xs text-slate-500">Our Price</p>
-                  <p class="text-lg font-bold" x-text="'$' + Number(beatThem.results.our_vehicle.price).toLocaleString()"></p>
+                  <p class="text-slate-500 mb-1">Our Price</p>
+                  <p class="font-bold text-sm sm:text-base" x-text="'$' + Number(beatThem.results.our_vehicle.price).toLocaleString()"></p>
                 </div>
-                <div class="text-center">
+                <div>
                   <p class="text-2xl font-black" :class="beatThem.results.summary.market_position==='BELOW'?'text-green-600':'text-red-600'"
-                    x-text="beatThem.results.summary.market_position==='BELOW'?'✓ WINNING':'✗ LOSING'"></p>
+                    x-text="beatThem.results.summary.market_position==='BELOW'?'✓':'✗'"></p>
+                  <p class="text-slate-600" x-text="beatThem.results.summary.market_position"></p>
                 </div>
-                <div class="text-right">
-                  <p class="text-xs text-slate-500">Advantage</p>
-                  <p class="text-lg font-bold" :class="beatThem.results.summary.market_position==='BELOW'?'text-green-600':'text-red-600'"
+                <div>
+                  <p class="text-slate-500 mb-1">Advantage</p>
+                  <p class="font-bold text-sm sm:text-base" :class="beatThem.results.summary.market_position==='BELOW'?'text-green-600':'text-red-600'"
                     x-text="'$' + Math.abs(beatThem.results.summary.price_advantage).toLocaleString()"></p>
                 </div>
               </div>
@@ -262,36 +278,38 @@
 
         <!-- Competitor List -->
         <div class="space-y-2">
-          <p class="text-sm font-bold text-slate-700" x-text="beatThem.results.competitors.length + ' Competitor Listings'"></p>
+          <p class="text-xs sm:text-sm font-bold text-slate-700" x-text="beatThem.results.competitors.length + ' listings'"></p>
           <div class="max-h-96 overflow-y-auto space-y-2">
             <template x-for="(comp, idx) in beatThem.results.competitors.slice(0, 10)" :key="idx">
-              <div class="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition">
+              <div class="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition cursor-pointer">
                 <div class="flex items-start justify-between gap-2 mb-2">
                   <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-sm text-slate-800" x-text="comp.heading"></p>
-                    <p class="text-xs text-slate-500" x-text="comp.dealer_name + (comp.dealer_city ? ', ' + comp.dealer_city : '')"></p>
+                    <p class="font-semibold text-xs sm:text-sm text-slate-800 line-clamp-2" x-text="comp.heading"></p>
+                    <p class="text-xs text-slate-500 line-clamp-1" x-text="comp.dealer_name + (comp.dealer_city ? ', ' + comp.dealer_city : '')"></p>
                   </div>
-                  <template x-if="comp.beats_us">
-                    <span class="badge bg-red-100 text-red-700 text-xs">Beats Us</span>
-                  </template>
-                  <template x-if="comp.vs_our_price !== undefined && !comp.beats_us">
-                    <span class="badge bg-green-100 text-green-700 text-xs">We Win</span>
-                  </template>
+                  <div class="shrink-0 ml-2">
+                    <template x-if="comp.beats_us">
+                      <span class="badge bg-red-100 text-red-700 text-xs px-2 py-1">🔴</span>
+                    </template>
+                    <template x-if="comp.vs_our_price !== undefined && !comp.beats_us">
+                      <span class="badge bg-green-100 text-green-700 text-xs px-2 py-1">✓</span>
+                    </template>
+                  </div>
                 </div>
                 <div class="grid grid-cols-3 gap-2 text-xs">
                   <div>
-                    <p class="text-slate-500">Price</p>
+                    <p class="text-slate-500 text-xs">Price</p>
                     <p class="font-bold text-slate-800">$<span x-text="Number(comp.price).toLocaleString()"></span></p>
                   </div>
                   <div>
-                    <p class="text-slate-500">Miles</p>
-                    <p class="font-bold" x-text="comp.miles ? Number(comp.miles).toLocaleString() : '—'"></p>
+                    <p class="text-slate-500 text-xs">Miles</p>
+                    <p class="font-bold text-xs" x-text="comp.miles ? (Number(comp.miles)/1000).toFixed(0)+'K' : '—'"></p>
                   </div>
                   <template x-if="comp.vs_our_price !== undefined">
                     <div>
-                      <p class="text-slate-500">vs Ours</p>
-                      <p class="font-bold" :class="comp.beats_us?'text-red-600':'text-green-600'"
-                        x-text="(comp.vs_our_price > 0 ? '+' : '') + '$' + Number(comp.vs_our_price).toLocaleString()"></p>
+                      <p class="text-slate-500 text-xs">vs Us</p>
+                      <p class="font-bold text-xs" :class="comp.beats_us?'text-red-600':'text-green-600'"
+                        x-text="(comp.vs_our_price > 0 ? '+' : '') + '$' + (Math.abs(comp.vs_our_price)/1000).toFixed(1)+'K'"></p>
                     </div>
                   </template>
                 </div>
@@ -310,15 +328,15 @@
   </div>
 
   <!-- DEAL KILLER TAB -->
-  <div x-show="tab==='killer'" class="bg-white rounded-xl p-6 shadow-md space-y-4">
-    <h2 class="text-xl font-bold text-slate-800">Deal Killer</h2>
-    <p class="text-sm text-slate-500">Crush objections with data</p>
+  <div x-show="tab==='killer'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
+    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Deal Killer</h2>
+    <p class="text-xs sm:text-sm text-slate-500">Crush objections with data</p>
 
     <div>
-      <label class="block text-sm font-semibold text-slate-700 mb-1">Enter VIN</label>
-      <div class="flex gap-2">
-        <input type="text" x-model="killer.vin" placeholder="JTHBX1C26G..." class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm">
-        <button @click="getKillerData()" :disabled="killerLoading" class="bg-blue-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+      <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Enter VIN</label>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input type="text" x-model="killer.vin" placeholder="JTHBX1C26G..." class="flex-1 px-4 py-3 border border-slate-300 rounded-lg text-base">
+        <button @click="getKillerData()" :disabled="killerLoading" class="bg-blue-600 text-white font-bold px-6 py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 active:scale-95 whitespace-nowrap">
           <span x-show="!killerLoading">Search</span>
           <span x-show="killerLoading">…</span>
         </button>
@@ -377,62 +395,62 @@
   </div>
 
   <!-- TRADE-IN ORACLE TAB -->
-  <div x-show="tab==='trade'" class="bg-white rounded-xl p-6 shadow-md space-y-4">
-    <h2 class="text-xl font-bold text-slate-800">Trade-In Estimator</h2>
-    <p class="text-sm text-slate-500">Instant value for customer's trade-in</p>
+  <div x-show="tab==='trade'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
+    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Trade-In Estimator</h2>
+    <p class="text-xs sm:text-sm text-slate-500">Instant value for customer's trade</p>
 
     <div class="space-y-3">
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Year</label>
-          <input type="number" x-model.number="trade.year" placeholder="2019" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Year</label>
+          <input type="number" x-model.number="trade.year" placeholder="2019" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Make</label>
-          <input type="text" x-model="trade.make" placeholder="Honda" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Make</label>
+          <input type="text" x-model="trade.make" placeholder="Honda" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Model</label>
-          <input type="text" x-model="trade.model" placeholder="Civic" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Model</label>
+          <input type="text" x-model="trade.model" placeholder="Civic" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">Mileage</label>
-          <input type="number" x-model.number="trade.miles" placeholder="75000" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Miles</label>
+          <input type="number" x-model.number="trade.miles" placeholder="75000" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
         </div>
       </div>
       <div>
-        <label class="block text-sm font-semibold text-slate-700 mb-1">Condition</label>
-        <select x-model="trade.condition" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+        <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Condition</label>
+        <select x-model="trade.condition" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
           <option value="poor">Poor</option>
           <option value="average">Average</option>
           <option value="good">Good</option>
           <option value="excellent">Excellent</option>
         </select>
       </div>
-      <button @click="estimateTradeIn()" :disabled="tradeLoading" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+      <button @click="estimateTradeIn()" :disabled="tradeLoading" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 active:scale-95">
         <span x-show="!tradeLoading">Get Trade-In Value</span>
         <span x-show="tradeLoading">Calculating…</span>
       </button>
     </div>
 
     <template x-if="trade.result">
-      <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-6 space-y-4">
+      <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-4 sm:p-6 space-y-4">
         <div class="text-center">
-          <p class="text-sm text-slate-600 font-semibold">OFFER RANGE</p>
-          <div class="flex items-center justify-center gap-4 mt-2">
+          <p class="text-xs sm:text-sm text-slate-600 font-semibold">OFFER RANGE</p>
+          <div class="grid grid-cols-3 gap-2 sm:gap-4 mt-3">
             <div class="text-center">
               <p class="text-xs text-slate-500 mb-1">Conservative</p>
-              <p class="text-xl font-bold text-slate-700">$<span x-text="Number(trade.result.offer_range.conservative).toLocaleString()"></span></p>
+              <p class="text-lg sm:text-xl font-bold text-slate-700">$<span x-text="(Number(trade.result.offer_range.conservative)/1000).toFixed(1)+'K'"></span></p>
             </div>
-            <div class="text-center border-l-2 border-r-2 border-green-300 px-4">
+            <div class="text-center border-l border-r border-green-300 px-2">
               <p class="text-xs text-slate-500 mb-1">Recommended</p>
-              <p class="text-3xl font-black text-green-700">$<span x-text="Number(trade.result.offer_range.recommended).toLocaleString()"></span></p>
+              <p class="text-2xl sm:text-3xl font-black text-green-700">$<span x-text="(Number(trade.result.offer_range.recommended)/1000).toFixed(1)+'K'"></span></p>
             </div>
             <div class="text-center">
               <p class="text-xs text-slate-500 mb-1">Aggressive</p>
-              <p class="text-xl font-bold text-slate-700">$<span x-text="Number(trade.result.offer_range.aggressive).toLocaleString()"></span></p>
+              <p class="text-lg sm:text-xl font-bold text-slate-700">$<span x-text="(Number(trade.result.offer_range.aggressive)/1000).toFixed(1)+'K'"></span></p>
             </div>
           </div>
         </div>
@@ -447,16 +465,16 @@
   </div>
 
   <!-- INVENTORY INTEL TAB -->
-  <div x-show="tab==='inventory'" class="bg-white rounded-xl p-6 shadow-md space-y-4">
-    <h2 class="text-xl font-bold text-slate-800">Inventory Intel</h2>
-    <p class="text-sm text-slate-500">Quick vehicle lookup</p>
+  <div x-show="tab==='inventory'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
+    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Inventory Intel</h2>
+    <p class="text-xs sm:text-sm text-slate-500">Quick vehicle lookup</p>
 
     <div class="space-y-3">
       <div>
-        <label class="block text-sm font-semibold text-slate-700 mb-1">Search</label>
-        <input type="text" x-model="inventory.search" placeholder="Model, trim, color..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+        <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Search</label>
+        <input type="text" x-model="inventory.search" placeholder="Model, trim, color..." class="w-full px-4 py-3 border border-slate-300 rounded-lg text-base">
       </div>
-      <button @click="searchInventory()" :disabled="invLoading" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+      <button @click="searchInventory()" :disabled="invLoading" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 active:scale-95">
         <span x-show="!invLoading">Search Inventory</span>
         <span x-show="invLoading">Searching…</span>
       </button>
@@ -464,17 +482,17 @@
 
     <template x-if="inventory.results && inventory.results.length > 0">
       <div class="space-y-2">
-        <p class="text-sm font-bold text-slate-700" x-text="inventory.results.length + ' vehicles found'"></p>
+        <p class="text-xs sm:text-sm font-bold text-slate-700" x-text="inventory.results.length + ' found'"></p>
         <template x-for="v in inventory.results" :key="v.vin">
-          <div class="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition">
-            <div class="flex items-start justify-between gap-3">
+          <div class="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition active:scale-95 cursor-pointer">
+            <div class="flex items-start justify-between gap-2">
               <div class="flex-1 min-w-0">
-                <p class="font-semibold text-slate-800" x-text="v.year + ' ' + v.make + ' ' + v.model + (v.trim ? ' ' + v.trim : '')"></p>
-                <p class="text-xs text-slate-500" x-text="(v.mileage ? Number(v.mileage).toLocaleString() + ' mi · ' : '') + (v.exterior_color || '')"></p>
+                <p class="font-semibold text-xs sm:text-sm text-slate-800 line-clamp-1" x-text="v.year + ' ' + v.make + ' ' + v.model + (v.trim ? ' ' + v.trim : '')"></p>
+                <p class="text-xs text-slate-500 line-clamp-1" x-text="(v.mileage ? (Number(v.mileage)/1000).toFixed(0)+'K mi' : '—') + (v.exterior_color ? ' · ' + v.exterior_color : '')"></p>
               </div>
               <div class="text-right shrink-0">
-                <p class="font-bold text-emerald-700 text-lg">$<span x-text="Number(v.effective_price || v.price_dollars).toLocaleString()"></span></p>
-                <p class="text-xs text-slate-400" x-text="'Days: ' + (v.days_on_lot || 0)"></p>
+                <p class="font-bold text-emerald-700 text-base sm:text-lg">$<span x-text="(Number(v.effective_price || v.price_dollars)/1000).toFixed(0)+'K'"></span></p>
+                <p class="text-xs text-slate-400" x-text="'Day ' + (v.days_on_lot || 0)"></p>
               </div>
             </div>
           </div>
@@ -483,7 +501,7 @@
     </template>
 
     <template x-if="inventory.searched && (!inventory.results || inventory.results.length === 0)">
-      <div class="text-center py-6 text-slate-400 text-sm">
+      <div class="text-center py-6 text-slate-400 text-xs sm:text-sm">
         No vehicles found
       </div>
     </template>
