@@ -283,18 +283,33 @@
       </div>
     </header>
 
-    <div class="flex-1 p-8 space-y-6 overflow-x-hidden">
+    <div class="flex-1 p-4 sm:p-8 space-y-6 overflow-x-hidden">
 
-      <div class="flex flex-wrap items-center gap-2">
-        <button class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='inventory' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='inventory'">Inventory</button>
-        <button class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='analytics' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='analytics'">Analytics</button>
-        <button class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='history' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='history'">Sync History</button>
-        <button class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='deal_history' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='deal_history';loadDealHistory()">Deal History</button>
-        <button x-show="isAdmin" class="text-xs px-3 py-1.5 rounded-lg border" :class="tab==='users' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='users';loadUsers()">Users</button>
+      <div class="flex gap-1 sm:gap-2 overflow-x-auto pb-2 -mx-4 sm:mx-0 px-4 sm:px-0">
+        <button class="text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-lg border font-medium shrink-0 whitespace-nowrap transition hover:shadow-md" :class="tab==='inventory' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='inventory'">
+          <span class="sm:hidden">Inv</span>
+          <span class="hidden sm:inline">Inventory</span>
+        </button>
+        <button class="text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-lg border font-medium shrink-0 whitespace-nowrap transition hover:shadow-md" :class="tab==='analytics' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='analytics'">
+          <span class="sm:hidden">Ana</span>
+          <span class="hidden sm:inline">Analytics</span>
+        </button>
+        <button class="text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-lg border font-medium shrink-0 whitespace-nowrap transition hover:shadow-md" :class="tab==='history' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='history'">
+          <span class="sm:hidden">Sync</span>
+          <span class="hidden sm:inline">Sync History</span>
+        </button>
+        <button class="text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-lg border font-medium shrink-0 whitespace-nowrap transition hover:shadow-md" :class="tab==='deal_history' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='deal_history';loadDealHistory()">
+          <span class="sm:hidden">Deals</span>
+          <span class="hidden sm:inline">Deal History</span>
+        </button>
+        <button x-show="isAdmin" class="text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-lg border font-medium shrink-0 whitespace-nowrap transition hover:shadow-md" :class="tab==='users' ? 'bg-fb text-white border-fb' : 'bg-white border-slate-200 text-slate-600'" @click="tab='users';loadUsers()">
+          <span class="sm:hidden">Users</span>
+          <span class="hidden sm:inline">Users</span>
+        </button>
       </div>
 
       <!-- ══ STAT CARDS ═════════════════════════════════════════════════════ -->
-      <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
 
         <!-- Active Listings -->
         <div class="stat-card">
@@ -368,9 +383,9 @@
       <div x-show="tab==='inventory'" x-cloak>
 
         <!-- Filters -->
-        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-wrap gap-3 items-end">
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 sm:p-4 space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-3 sm:items-end">
           <!-- Search -->
-          <div class="flex-1 min-w-48">
+          <div class="w-full sm:flex-1 sm:min-w-48">
             <label class="block text-xs font-semibold text-slate-500 mb-1">Search</label>
             <div class="relative">
               <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
@@ -380,7 +395,7 @@
             </div>
           </div>
           <!-- Make -->
-          <div class="min-w-36">
+          <div class="w-full sm:w-auto sm:min-w-36">
             <label class="block text-xs font-semibold text-slate-500 mb-1">Make</label>
             <select x-model="filters.make" @change="loadVehicles()"
               class="w-full py-2 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb">
@@ -391,7 +406,7 @@
             </select>
           </div>
           <!-- Year -->
-          <div class="min-w-28">
+          <div class="w-full sm:w-auto sm:min-w-28">
             <label class="block text-xs font-semibold text-slate-500 mb-1">Year</label>
             <select x-model="filters.year" @change="loadVehicles()"
               class="w-full py-2 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb">
@@ -402,7 +417,7 @@
             </select>
           </div>
           <!-- Condition -->
-          <div class="min-w-32">
+          <div class="w-full sm:w-auto sm:min-w-32">
             <label class="block text-xs font-semibold text-slate-500 mb-1">Condition</label>
             <select x-model="filters.condition" @change="loadVehicles()"
               class="w-full py-2 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb">
@@ -412,7 +427,7 @@
             </select>
           </div>
           <!-- Body Style -->
-          <div class="min-w-36">
+          <div class="w-full sm:w-auto sm:min-w-36">
             <label class="block text-xs font-semibold text-slate-500 mb-1">Body Style</label>
             <select x-model="filters.body_style" @change="loadVehicles()"
               class="w-full py-2 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fb/30 focus:border-fb">
@@ -423,10 +438,10 @@
             </select>
           </div>
           <!-- 3-Row SUV toggle -->
-          <div class="flex items-end">
+          <div class="w-full sm:w-auto sm:flex sm:items-end">
             <button
               @click="filters.three_row = !filters.three_row; loadVehicles()"
-              class="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border rounded-lg transition-all select-none"
+              class="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2 text-xs font-semibold border rounded-lg transition-all select-none"
               :class="filters.three_row ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'">
               <svg class="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 20 20"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 5a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V9zm0 5a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z"/></svg>
               3-Row SUVs
