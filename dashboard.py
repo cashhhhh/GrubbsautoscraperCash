@@ -815,6 +815,77 @@ def api_market_value(vin: str = FPath(...), _: dict = Depends(_current_user)):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Trade-in Value lookup — estimate from MarketCheck comps
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/api/trade-in-value")
+def api_trade_in_value(
+    year: int = Query(...),
+    make: str = Query(...),
+    model: str = Query(...),
+    miles: int = Query(default=0),
+    _: dict = Depends(_current_user)
+):
+    """Estimate trade-in value based on comps for customer's vehicle."""
+    import statistics
+
+    settings   = db.get_all_settings(_ENV_ADDENDUM)
+    api_key    = MARKETCHECK_API_KEY or settings.get("marketcheck_api_key", "")
+    dealer_zip = settings.get("dealer_zip", "")
+    radius     = settings.get("market_radius", 150)
+
+    if not api_key:
+        raise HTTPException(400, "MarketCheck API key not configured")
+    if not dealer_zip:
+        raise HTTPException(400, "Dealer ZIP not configured")
+
+    try:
+        resp = requests.get(
+            "https://api.marketcheck.com/v2/search/car/active",
+            params={
+                "api_key":    api_key,
+                "make":       make,
+                "model":      model,
+                "car_type":   "used",
+                "zip":        dealer_zip,
+                "radius":     radius,
+                "rows":       100,
+                "sort_by":    "price",
+                "sort_order": "asc",
+            },
+            timeout=15,
+        )
+        data = resp.json()
+    except Exception as exc:
+        raise HTTPException(502, f"MarketCheck request failed: {exc}")
+
+    if resp.status_code != 200:
+        msg = data.get("message") or data.get("error", {}).get("message", "") or resp.text[:200]
+        raise HTTPException(502, f"MarketCheck ({resp.status_code}): {msg}")
+
+    if "error" in data:
+        raise HTTPException(502, f"MarketCheck: {data['error'].get('message', 'Unknown error')}")
+
+    listings = data.get("listings", [])
+    prices = [l.get("price") for l in listings if l.get("price") and l.get("price") > 0]
+
+    if not prices:
+        raise HTTPException(404, "No comparable listings found for this vehicle")
+
+    median_price = round(statistics.median(prices))
+    # Estimate trade-in at 80% of market median
+    estimated_trade_in = round(median_price * 0.80)
+
+    return {
+        "trade_in_value": estimated_trade_in,
+        "market_value": median_price,
+        "comp_count": len(prices),
+        "year": year,
+        "make": make,
+        "model": model,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # VIN Decode  (MarketCheck — cached permanently)
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/api/vin-decode/{vin}")
