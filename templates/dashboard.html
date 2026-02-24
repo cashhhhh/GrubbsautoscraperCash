@@ -275,11 +275,16 @@
           <span class="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-600" x-text="statusMsg"></span>
         </template>
         <span class="text-xs text-slate-400" x-text="'Updated ' + lastRefreshed"></span>
-        <button class="btn-ghost text-xs" @click="reload()">
+        <button class="btn-ghost text-xs hidden sm:inline-flex" @click="reload()">
           <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
           Refresh
         </button>
-        <button class="btn-ghost text-xs" @click="sendWeeklyDigest()">Weekly Digest</button>
+        <button class="btn-ghost text-xs hidden sm:inline-flex" @click="sendWeeklyDigest()">Weekly Digest</button>
+        <a href="/salesman" class="btn-primary text-xs">
+          <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path d="M10.5 1.5H5.75A2.25 2.25 0 003.5 3.75v12.5A2.25 2.25 0 005.75 18.5h8.5a2.25 2.25 0 002.25-2.25V9M10.5 1.5v4m0-4L6 6m10.5-1.5v4M7 10h6m-6 3h3"/></svg>
+          <span class="hidden sm:inline">Salesman Tools</span>
+          <span class="sm:hidden">Tools</span>
+        </a>
       </div>
     </header>
 
