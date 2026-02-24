@@ -581,6 +581,7 @@ def api_market_comps(
     year_max: Optional[int] = Query(None),
     miles_min: Optional[int] = Query(None),
     miles_max: Optional[int] = Query(None),
+    trim: Optional[str] = Query(None),
     _: dict = Depends(_current_user)
 ):
     settings  = db.get_all_settings(_ENV_ADDENDUM)
@@ -634,6 +635,9 @@ def api_market_comps(
             filtered = [c for c in filtered if c.get("year") and year_min <= c.get("year") <= year_max]
         if miles_min is not None and miles_max is not None:
             filtered = [c for c in filtered if c.get("miles") is not None and miles_min <= c.get("miles") <= miles_max]
+        if trim:
+            trim_lower = trim.lower()
+            filtered = [c for c in filtered if trim_lower in (c.get("trim") or "").lower()]
 
         return {
             "listings":  filtered,
@@ -642,7 +646,7 @@ def api_market_comps(
             "cached":    True,
             "search":    {"make": make, "model": model, "zip": dealer_zip, "radius": radius},
             "vehicle":   {"year": vehicle_year, "miles": vehicle_miles},
-            "filters":   {"year_min": year_min, "year_max": year_max, "miles_min": miles_min, "miles_max": miles_max},
+            "filters":   {"year_min": year_min, "year_max": year_max, "miles_min": miles_min, "miles_max": miles_max, "trim": trim or ""},
         }
 
     try:
@@ -655,7 +659,7 @@ def api_market_comps(
                 "car_type":   "used",
                 "zip":        dealer_zip,
                 "radius":     radius,
-                "rows":       30,
+                "rows":       100,
                 "sort_by":    "price",
                 "sort_order": "asc",
             },
@@ -702,6 +706,9 @@ def api_market_comps(
         filtered = [c for c in filtered if c.get("year") and year_min <= c.get("year") <= year_max]
     if miles_min is not None and miles_max is not None:
         filtered = [c for c in filtered if c.get("miles") is not None and miles_min <= c.get("miles") <= miles_max]
+    if trim:
+        trim_lower = trim.lower()
+        filtered = [c for c in filtered if trim_lower in (c.get("trim") or "").lower()]
 
     return {
         "listings":  filtered,
@@ -710,7 +717,7 @@ def api_market_comps(
         "cached":    False,
         "search":    {"make": make, "model": model, "zip": dealer_zip, "radius": radius},
         "vehicle":   {"year": vehicle_year, "miles": vehicle_miles},
-        "filters":   {"year_min": year_min, "year_max": year_max, "miles_min": miles_min, "miles_max": miles_max},
+        "filters":   {"year_min": year_min, "year_max": year_max, "miles_min": miles_min, "miles_max": miles_max, "trim": trim or ""},
     }
 
 
@@ -757,7 +764,7 @@ def api_market_value(vin: str = FPath(...), _: dict = Depends(_current_user)):
                     "car_type":   "used",
                     "zip":        dealer_zip,
                     "radius":     radius,
-                    "rows":       30,
+                    "rows":       100,
                     "sort_by":    "price",
                     "sort_order": "asc",
                 },
