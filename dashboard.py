@@ -178,6 +178,14 @@ def index(request: Request):
     return _TEMPLATE.read_text(encoding="utf-8")
 
 
+@app.get("/salesman", response_class=HTMLResponse)
+def salesman_tools(request: Request):
+    if not request.session.get("username"):
+        return RedirectResponse("/login", status_code=302)
+    salesman_template = Path(__file__).parent / "templates" / "salesman_tools.html"
+    return salesman_template.read_text(encoding="utf-8")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # User management (admin only)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -882,6 +890,386 @@ def api_trade_in_value(
         "year": year,
         "make": make,
         "model": model,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SALESMAN POWER TOOLS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Commission Calculator
+@app.get("/api/salesman/commission")
+def api_commission(
+    base_price: int = Query(...),
+    addendum: int = Query(default=0),
+    trade_in_value: int = Query(default=0),
+    doc_fee: int = Query(default=0),
+    cost: int = Query(default=0),
+    pack: int = Query(default=0),
+    _: dict = Depends(_current_user)
+):
+    """Calculate salesman commission on a deal."""
+    # Gross = (base_price + addendum) - cost - pack
+    gross = (base_price + addendum) - cost - pack
+
+    # Commission = 20% of gross (customize this logic per dealership)
+    commission_rate = 0.20
+    commission = round(gross * commission_rate)
+
+    return {
+        "base_price": base_price,
+        "addendum": addendum,
+        "total_selling_price": base_price + addendum,
+        "cost": cost,
+        "pack": pack,
+        "gross": gross,
+        "commission_rate": commission_rate * 100,
+        "commission": commission,
+        "trade_in_value": trade_in_value,
+    }
+
+
+# Financing Wizard - Monthly Payment Estimator
+@app.get("/api/salesman/payment-estimate")
+def api_payment_estimate(
+    vehicle_price: int = Query(...),
+    down_payment: int = Query(default=0),
+    apr: float = Query(default=6.5),
+    term_months: int = Query(default=72),
+    tax_rate: float = Query(default=0.0825),
+    doc_fee: int = Query(default=299),
+    _: dict = Depends(_current_user)
+):
+    """Calculate estimated monthly payment for customer financing."""
+    # Out the door price
+    tax = round((vehicle_price * tax_rate))
+    out_the_door = vehicle_price + tax + doc_fee
+
+    # Amount to finance
+    amount_financed = max(0, out_the_door - down_payment)
+
+    # Monthly payment calculation (standard amortization)
+    if apr <= 0 or amount_financed <= 0:
+        monthly_payment = 0
+    else:
+        monthly_rate = apr / 100 / 12
+        monthly_payment = round(amount_financed * monthly_rate / (1 - (1 + monthly_rate) ** -term_months), 2)
+
+    return {
+        "vehicle_price": vehicle_price,
+        "tax": tax,
+        "doc_fee": doc_fee,
+        "out_the_door": out_the_door,
+        "down_payment": down_payment,
+        "amount_financed": amount_financed,
+        "apr": apr,
+        "term_months": term_months,
+        "monthly_payment": monthly_payment,
+        "total_interest": round((monthly_payment * term_months - amount_financed), 2) if amount_financed > 0 else 0,
+        "financing_options": [
+            {"months": 48, "rate": apr, "payment": _calculate_payment(amount_financed, apr, 48)},
+            {"months": 60, "rate": apr, "payment": _calculate_payment(amount_financed, apr, 60)},
+            {"months": 72, "rate": apr, "payment": _calculate_payment(amount_financed, apr, 72)},
+            {"months": 84, "rate": apr, "payment": _calculate_payment(amount_financed, apr, 84)},
+        ]
+    }
+
+
+def _calculate_payment(principal: int, apr: float, months: int) -> float:
+    """Helper: calculate monthly payment."""
+    if apr <= 0 or principal <= 0:
+        return 0
+    monthly_rate = apr / 100 / 12
+    return round(principal * monthly_rate / (1 - (1 + monthly_rate) ** -months), 2)
+
+
+# Deal Simulator - "What If" Scenarios
+@app.post("/api/salesman/simulate-deal")
+def api_simulate_deal(
+    base_price: int = Query(...),
+    addendum: int = Query(default=0),
+    down_payment: int = Query(default=0),
+    apr: float = Query(default=6.5),
+    term_months: int = Query(default=72),
+    cost: int = Query(default=0),
+    pack: int = Query(default=0),
+    tax_rate: float = Query(default=0.0825),
+    doc_fee: int = Query(default=299),
+    _: dict = Depends(_current_user)
+):
+    """Simulate a complete deal with all numbers."""
+    # Gross profit
+    gross = (base_price + addendum) - cost - pack
+    commission = round(gross * 0.20)
+
+    # Customer out-the-door
+    tax = round((base_price + addendum) * tax_rate)
+    out_the_door = base_price + addendum + tax + doc_fee
+    amount_financed = max(0, out_the_door - down_payment)
+
+    monthly_payment = _calculate_payment(amount_financed, apr, term_months)
+
+    return {
+        "salesman_view": {
+            "vehicle_price": base_price,
+            "addendum": addendum,
+            "total_selling_price": base_price + addendum,
+            "cost": cost,
+            "pack": pack,
+            "gross": gross,
+            "commission": commission,
+            "margin_pct": round((gross / (base_price + addendum)) * 100, 1) if base_price > 0 else 0,
+        },
+        "customer_view": {
+            "vehicle_price": base_price,
+            "addendum": addendum,
+            "total_selling_price": base_price + addendum,
+            "tax": tax,
+            "doc_fee": doc_fee,
+            "out_the_door": out_the_door,
+            "down_payment": down_payment,
+            "amount_financed": amount_financed,
+            "apr": apr,
+            "term_months": term_months,
+            "monthly_payment": monthly_payment,
+        }
+    }
+
+
+# Inventory Intel - Quick Vehicle Lookup
+@app.get("/api/salesman/inventory-quick")
+def api_inventory_quick(
+    search: str = Query(default=""),
+    color: str = Query(default=""),
+    trim: str = Query(default=""),
+    min_price: int = Query(default=0),
+    max_price: int = Query(default=999999),
+    _: dict = Depends(_current_user)
+):
+    """Fast inventory lookup for salesmen - show active vehicles matching criteria."""
+    vehicles = db.get_vehicles(search=search, active_only=True)
+
+    # Filter by color, trim, price
+    if color:
+        color_lower = color.lower()
+        vehicles = [v for v in vehicles if color_lower in (v.get("exterior_color") or "").lower()]
+
+    if trim:
+        trim_lower = trim.lower()
+        vehicles = [v for v in vehicles if trim_lower in (v.get("trim") or "").lower()]
+
+    price_field = "price_override" if vehicles and vehicles[0].get("price_override") is not None else "price_dollars"
+    vehicles = [v for v in vehicles if min_price <= (v.get(price_field) or 0) <= max_price]
+
+    addendum = _effective_addendum()
+    enriched = [_enrich_vehicle(v, addendum) for v in vehicles]
+
+    return {
+        "vehicles": enriched,
+        "count": len(enriched),
+    }
+
+
+# Deal Killer - Objection Response with Comps + Pricing
+@app.get("/api/salesman/deal-killer/{vin}")
+def api_deal_killer(
+    vin: str = FPath(...),
+    _: dict = Depends(_current_user)
+):
+    """
+    Get everything a salesman needs to crush an objection:
+    - Our price vs market comps
+    - Trade-in value
+    - Financing breakdown
+    - Margin analysis
+    """
+    settings = db.get_all_settings(_ENV_ADDENDUM)
+    api_key = settings.get("marketcheck_api_key", "")
+    dealer_zip = settings.get("dealer_zip", "")
+    radius = settings.get("market_radius", 150)
+
+    # Get our vehicle
+    rows = db.get_vehicles(search=vin, active_only=False)
+    if not rows:
+        raise HTTPException(404, f"VIN {vin} not found")
+    v = rows[0]
+
+    our_price = v.get("price_override") if v.get("price_override") is not None else v.get("price_dollars")
+    make = v.get("make", "")
+    model = v.get("model", "")
+
+    response = {
+        "vehicle": {
+            "vin": v.get("vin"),
+            "year": v.get("year"),
+            "make": make,
+            "model": model,
+            "trim": v.get("trim"),
+            "mileage": v.get("mileage"),
+            "our_price": our_price,
+        },
+        "comps": [],
+        "trade_in": None,
+        "financing": None,
+        "objection_responses": [],
+    }
+
+    # Get market comps if API key is configured
+    if api_key and dealer_zip:
+        cache_key = f"{make.lower()}|{model.lower()}|{dealer_zip}|{radius}"
+        cached = db.get_comps_cache(cache_key)
+
+        if cached is None:
+            try:
+                comp_resp = requests.get(
+                    "https://api.marketcheck.com/v2/search/car/active",
+                    params={
+                        "api_key": api_key,
+                        "make": make,
+                        "model": model,
+                        "car_type": "used",
+                        "zip": dealer_zip,
+                        "radius": radius,
+                        "rows": 20,
+                        "sort_by": "price",
+                        "sort_order": "asc",
+                    },
+                    timeout=10,
+                )
+                if comp_resp.status_code == 200:
+                    data = comp_resp.json()
+                    listings = data.get("listings", [])
+                    cached = [{"price": lst.get("price"), "miles": lst.get("miles"), "year": lst.get("year")} for lst in listings if lst.get("price")]
+                    if cached:
+                        db.set_comps_cache(cache_key, cached)
+            except Exception:
+                pass
+
+        if cached:
+            response["comps"] = cached[:5]  # Top 5 for salesman reference
+            prices = [c.get("price") for c in cached if c.get("price") and c["price"] > 0]
+            if prices:
+                import statistics
+                avg_price = round(statistics.mean(prices))
+                median_price = round(statistics.median(prices))
+                min_price = min(prices)
+                max_price = max(prices)
+
+                response["pricing_intelligence"] = {
+                    "our_price": our_price,
+                    "market_avg": avg_price,
+                    "market_median": median_price,
+                    "market_min": min_price,
+                    "market_max": max_price,
+                    "price_position": "ABOVE" if our_price > avg_price else "BELOW",
+                    "difference": our_price - avg_price,
+                    "pct_difference": round(((our_price - avg_price) / avg_price) * 100, 1),
+                }
+
+                # Generate objection responses
+                if our_price > avg_price:
+                    response["objection_responses"].append({
+                        "objection": "Your price is too high",
+                        "response": f"Actually, the market average for this {v.get('year')} {make} {model} is ${avg_price:,}. We're only ${our_price - avg_price:,} above market, and we include [your value props].",
+                        "strength": "HIGH" if (our_price - avg_price) < 1000 else "MEDIUM"
+                    })
+                else:
+                    response["objection_responses"].append({
+                        "objection": "Your price is too high",
+                        "response": f"Good news! We're ${avg_price - our_price:,} BELOW the market average for this vehicle. Market avg is ${avg_price:,}, we're ${our_price:,}.",
+                        "strength": "HIGH"
+                    })
+
+    return response
+
+
+# Trade-In Oracle - Snap Photo or VIN for Instant Value
+class TradeInEstimate(BaseModel):
+    year: int
+    make: str
+    model: str
+    miles: int = 0
+    condition: str = "average"  # poor, average, good, excellent
+
+
+@app.post("/api/salesman/trade-in-estimate")
+def api_trade_in_estimate(
+    payload: TradeInEstimate,
+    _: dict = Depends(_current_user)
+):
+    """Estimate trade-in value based on vehicle details."""
+    import statistics
+
+    settings = db.get_all_settings(_ENV_ADDENDUM)
+    api_key = settings.get("marketcheck_api_key", "")
+    dealer_zip = settings.get("dealer_zip", "")
+    radius = settings.get("market_radius", 150)
+
+    if not api_key or not dealer_zip:
+        raise HTTPException(400, "MarketCheck API key and dealer ZIP must be configured")
+
+    try:
+        resp = requests.get(
+            "https://api.marketcheck.com/v2/search/car/active",
+            params={
+                "api_key": api_key,
+                "make": payload.make,
+                "model": payload.model,
+                "car_type": "used",
+                "zip": dealer_zip,
+                "radius": radius,
+                "rows": 100,
+            },
+            timeout=10,
+        )
+        data = resp.json()
+    except Exception as exc:
+        raise HTTPException(502, f"MarketCheck request failed: {exc}")
+
+    if resp.status_code != 200:
+        raise HTTPException(502, "MarketCheck API error")
+
+    listings = data.get("listings", [])
+    prices = [l.get("price") for l in listings if l.get("price") and l.get("price") > 0]
+
+    if not prices:
+        raise HTTPException(404, "No comparable trade-ins found")
+
+    market_median = round(statistics.median(prices))
+
+    # Condition adjustment
+    condition_factor = {
+        "poor": 0.65,
+        "average": 0.75,
+        "good": 0.85,
+        "excellent": 0.90,
+    }.get(payload.condition.lower(), 0.75)
+
+    # Mileage adjustment (roughly 5¢ per mile over 60k)
+    mileage_factor = 1.0
+    if payload.miles > 60000:
+        excess_miles = payload.miles - 60000
+        mileage_deduction = (excess_miles * 0.05) / market_median
+        mileage_factor = max(0.5, 1.0 - min(mileage_deduction, 0.3))
+
+    trade_in_value = round(market_median * condition_factor * mileage_factor)
+
+    return {
+        "trade_in_value": trade_in_value,
+        "market_median": market_median,
+        "vehicle": f"{payload.year} {payload.make} {payload.model}",
+        "miles": payload.miles,
+        "condition": payload.condition,
+        "breakdown": {
+            "base_market_value": market_median,
+            "condition_adjustment": f"{condition_factor * 100:.0f}%",
+            "mileage_adjustment": f"{mileage_factor * 100:.0f}%",
+        },
+        "offer_range": {
+            "conservative": round(trade_in_value * 0.95),
+            "recommended": trade_in_value,
+            "aggressive": round(trade_in_value * 1.05),
+        }
     }
 
 
