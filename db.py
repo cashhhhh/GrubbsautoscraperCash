@@ -815,7 +815,7 @@ def save_deal(deal: dict) -> int:
             deal.get("gross"),
             deal.get("notes", ""),
         ))
-        return c.fetchone()[0]
+        return c.fetchone()['id']
 
 
 # ─────────────────────────────────────────────────────────────────────────────
