@@ -31,6 +31,9 @@
     <button @click="tab='payment'" :class="tab==='payment'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-4 py-2 rounded-lg font-semibold text-sm shrink-0 transition">
       📊 Payment
     </button>
+    <button @click="tab='beatthem'" :class="tab==='beatthem'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-4 py-2 rounded-lg font-semibold text-sm shrink-0 transition">
+      ⚔️ Beat Them
+    </button>
     <button @click="tab='killer'" :class="tab==='killer'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-4 py-2 rounded-lg font-semibold text-sm shrink-0 transition">
       🎯 Deal Killer
     </button>
@@ -162,6 +165,146 @@
             <p class="font-bold">$<span x-text="Number(payment.result.down_payment).toLocaleString()"></span></p>
           </div>
         </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- BEAT THEM TAB -->
+  <div x-show="tab==='beatthem'" class="bg-white rounded-xl p-6 shadow-md space-y-4">
+    <h2 class="text-xl font-bold text-slate-800">Beat Them</h2>
+    <p class="text-sm text-slate-500">Customer saw one cheaper? Find & crush competitors.</p>
+
+    <div class="space-y-3 bg-slate-50 p-4 rounded-lg">
+      <p class="text-xs font-semibold text-slate-600 mb-3">Competitor Vehicle</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Year</label>
+          <input type="number" x-model.number="beatThem.year" placeholder="2023" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Make</label>
+          <input type="text" x-model="beatThem.make" placeholder="INFINITI" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Model</label>
+          <input type="text" x-model="beatThem.model" placeholder="Q5" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Trim (optional)</label>
+          <input type="text" x-model="beatThem.trim" placeholder="Premium" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Our VIN (for comparison)</label>
+        <input type="text" x-model="beatThem.ourVin" placeholder="JTHBX1C26G..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+      </div>
+      <button @click="findCompetitors()" :disabled="beatThemLoading" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+        <span x-show="!beatThemLoading">Search Competitors</span>
+        <span x-show="beatThemLoading">Searching…</span>
+      </button>
+    </div>
+
+    <!-- Results -->
+    <template x-if="beatThem.results">
+      <div class="space-y-4">
+        <!-- Summary Stats -->
+        <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-4">
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="bg-white rounded p-2">
+              <p class="text-xs text-slate-500">Total Found</p>
+              <p class="text-2xl font-bold text-slate-800" x-text="beatThem.results.summary.total_found"></p>
+            </div>
+            <div class="bg-white rounded p-2">
+              <p class="text-xs text-slate-500">Market Avg</p>
+              <p class="text-lg font-bold text-slate-800">$<span x-text="Number(beatThem.results.summary.avg_competitor_price).toLocaleString()"></span></p>
+            </div>
+          </div>
+
+          <template x-if="beatThem.results.our_vehicle && beatThem.results.our_vehicle.price">
+            <div class="mt-3 pt-3 border-t border-red-200">
+              <p class="text-xs text-slate-600 mb-2">OUR VEHICLE VS MARKET</p>
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-xs text-slate-500">Our Price</p>
+                  <p class="text-lg font-bold" x-text="'$' + Number(beatThem.results.our_vehicle.price).toLocaleString()"></p>
+                </div>
+                <div class="text-center">
+                  <p class="text-2xl font-black" :class="beatThem.results.summary.market_position==='BELOW'?'text-green-600':'text-red-600'"
+                    x-text="beatThem.results.summary.market_position==='BELOW'?'✓ WINNING':'✗ LOSING'"></p>
+                </div>
+                <div class="text-right">
+                  <p class="text-xs text-slate-500">Advantage</p>
+                  <p class="text-lg font-bold" :class="beatThem.results.summary.market_position==='BELOW'?'text-green-600':'text-red-600'"
+                    x-text="'$' + Math.abs(beatThem.results.summary.price_advantage).toLocaleString()"></p>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Talking Points -->
+        <template x-if="beatThem.results.talking_points && beatThem.results.talking_points.length > 0">
+          <div class="space-y-2">
+            <p class="text-sm font-bold text-slate-700">💬 Your Talking Points</p>
+            <template x-for="pt in beatThem.results.talking_points" :key="pt.message">
+              <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p class="text-xs font-semibold text-green-700 mb-1" x-text="pt.type"></p>
+                <p class="text-sm text-slate-700 font-semibold" x-text="pt.message"></p>
+                <template x-if="pt.suggestion">
+                  <p class="text-xs text-slate-600 mt-1">💡 <span x-text="pt.suggestion"></span></p>
+                </template>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Competitor List -->
+        <div class="space-y-2">
+          <p class="text-sm font-bold text-slate-700" x-text="beatThem.results.competitors.length + ' Competitor Listings'"></p>
+          <div class="max-h-96 overflow-y-auto space-y-2">
+            <template x-for="(comp, idx) in beatThem.results.competitors.slice(0, 10)" :key="idx">
+              <div class="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-sm text-slate-800" x-text="comp.heading"></p>
+                    <p class="text-xs text-slate-500" x-text="comp.dealer_name + (comp.dealer_city ? ', ' + comp.dealer_city : '')"></p>
+                  </div>
+                  <template x-if="comp.beats_us">
+                    <span class="badge bg-red-100 text-red-700 text-xs">Beats Us</span>
+                  </template>
+                  <template x-if="comp.vs_our_price !== undefined && !comp.beats_us">
+                    <span class="badge bg-green-100 text-green-700 text-xs">We Win</span>
+                  </template>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <p class="text-slate-500">Price</p>
+                    <p class="font-bold text-slate-800">$<span x-text="Number(comp.price).toLocaleString()"></span></p>
+                  </div>
+                  <div>
+                    <p class="text-slate-500">Miles</p>
+                    <p class="font-bold" x-text="comp.miles ? Number(comp.miles).toLocaleString() : '—'"></p>
+                  </div>
+                  <template x-if="comp.vs_our_price !== undefined">
+                    <div>
+                      <p class="text-slate-500">vs Ours</p>
+                      <p class="font-bold" :class="comp.beats_us?'text-red-600':'text-green-600'"
+                        x-text="(comp.vs_our_price > 0 ? '+' : '') + '$' + Number(comp.vs_our_price).toLocaleString()"></p>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="beatThemError">
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+        <p class="text-sm text-red-700 font-semibold" x-text="beatThemError"></p>
       </div>
     </template>
   </div>
@@ -372,6 +515,17 @@ function salesmanTools() {
       result: null,
     },
 
+    beatThem: {
+      year: 2023,
+      make: 'INFINITI',
+      model: 'Q5',
+      trim: '',
+      ourVin: '',
+      results: null,
+    },
+    beatThemLoading: false,
+    beatThemError: '',
+
     killer: {
       vin: '',
       result: null,
@@ -480,6 +634,28 @@ function salesmanTools() {
         this.inventory.results = [];
       }
       this.invLoading = false;
+    },
+
+    async findCompetitors() {
+      if (!this.beatThem.year || !this.beatThem.make || !this.beatThem.model) {
+        alert('Enter year, make, and model');
+        return;
+      }
+      this.beatThemLoading = true;
+      this.beatThemError = '';
+      try {
+        let url = `/api/salesman/beat-them?year=${this.beatThem.year}&make=${encodeURIComponent(this.beatThem.make)}&model=${encodeURIComponent(this.beatThem.model)}`;
+        if (this.beatThem.trim) url += `&trim=${encodeURIComponent(this.beatThem.trim)}`;
+        if (this.beatThem.ourVin) url += `&our_vin=${encodeURIComponent(this.beatThem.ourVin)}`;
+
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error');
+        this.beatThem.results = data;
+      } catch (e) {
+        this.beatThemError = e.message;
+      }
+      this.beatThemLoading = false;
     },
   };
 }

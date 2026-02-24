@@ -1183,6 +1183,173 @@ def api_deal_killer(
     return response
 
 
+# Beat Them - Live Competitor Pricing Widget
+@app.get("/api/salesman/beat-them")
+def api_beat_them(
+    year: int = Query(...),
+    make: str = Query(...),
+    model: str = Query(...),
+    trim: Optional[str] = Query(None),
+    miles: Optional[int] = Query(None),
+    our_vin: Optional[str] = Query(None),
+    _: dict = Depends(_current_user)
+):
+    """
+    Find competitor vehicles and compare pricing.
+    Salesman: "Customer saw one cheaper at [dealer]"
+    → Type in competitor's vehicle specs
+    → Get all listings + our price
+    → Instant win/lose analysis
+    """
+    settings = db.get_all_settings(_ENV_ADDENDUM)
+    api_key = settings.get("marketcheck_api_key", "")
+    dealer_zip = settings.get("dealer_zip", "")
+    radius = settings.get("market_radius", 150)
+
+    if not api_key or not dealer_zip:
+        raise HTTPException(400, "MarketCheck API key not configured")
+
+    # Get OUR vehicle for comparison (optional)
+    our_price = None
+    our_miles = None
+    if our_vin:
+        rows = db.get_vehicles(search=our_vin, active_only=False)
+        if rows:
+            v = rows[0]
+            our_price = v.get("price_override") if v.get("price_override") is not None else v.get("price_dollars")
+            our_miles = v.get("mileage")
+
+    # Search for competitor vehicles
+    try:
+        resp = requests.get(
+            "https://api.marketcheck.com/v2/search/car/active",
+            params={
+                "api_key": api_key,
+                "year": year,
+                "make": make,
+                "model": model,
+                "car_type": "used",
+                "zip": dealer_zip,
+                "radius": radius,
+                "rows": 50,
+                "sort_by": "price",
+            },
+            timeout=10,
+        )
+        data = resp.json()
+    except Exception as exc:
+        raise HTTPException(502, f"MarketCheck request failed: {exc}")
+
+    if resp.status_code != 200:
+        raise HTTPException(502, "MarketCheck API error")
+
+    listings = data.get("listings", [])
+
+    # Process listings
+    competitors = []
+    for lst in listings:
+        price = lst.get("price")
+        lst_miles = lst.get("miles")
+        lst_trim = lst.get("trim", "")
+
+        # Filter by trim if specified
+        if trim and trim.lower() not in lst_trim.lower():
+            continue
+
+        comp = {
+            "vin": lst.get("vin", ""),
+            "heading": lst.get("heading", ""),
+            "price": price,
+            "miles": lst_miles,
+            "trim": lst_trim,
+            "year": lst.get("year"),
+            "dealer_name": (lst.get("dealer") or {}).get("name", ""),
+            "dealer_city": (lst.get("dealer") or {}).get("city", ""),
+            "exterior_color": lst.get("exterior_color", ""),
+            "vdp_url": lst.get("vdp_url", ""),
+        }
+
+        # Compare to OUR vehicle
+        if our_price and price:
+            comp["vs_our_price"] = price - our_price
+            comp["beats_us"] = price < our_price
+            if our_miles and lst_miles:
+                mileage_diff = lst_miles - our_miles
+                comp["mileage_comparison"] = f"{'+' if mileage_diff > 0 else ''}{mileage_diff:,} miles"
+
+        competitors.append(comp)
+
+    # Summary stats
+    prices = [c["price"] for c in competitors if c.get("price") and c["price"] > 0]
+    avg_competitor_price = round(sum(prices) / len(prices)) if prices else None
+    min_competitor_price = min(prices) if prices else None
+    beating_us = len([c for c in competitors if c.get("beats_us")]) if our_price else 0
+
+    return {
+        "search": {
+            "year": year,
+            "make": make,
+            "model": model,
+            "trim": trim,
+            "zip": dealer_zip,
+            "radius": radius,
+        },
+        "our_vehicle": {
+            "vin": our_vin,
+            "price": our_price,
+            "miles": our_miles,
+        } if our_vin else None,
+        "competitors": competitors,
+        "summary": {
+            "total_found": len(competitors),
+            "avg_competitor_price": avg_competitor_price,
+            "min_competitor_price": min_competitor_price,
+            "competitors_beating_us": beating_us,
+            "we_beat_them": len(competitors) - beating_us if our_price else 0,
+            "market_position": "ABOVE" if our_price and avg_competitor_price and our_price > avg_competitor_price else "BELOW" if our_price else None,
+            "price_advantage": abs(our_price - avg_competitor_price) if our_price and avg_competitor_price else None,
+        },
+        "talking_points": _generate_beat_them_talking_points(our_price, avg_competitor_price, competitors) if our_price else [],
+    }
+
+
+def _generate_beat_them_talking_points(our_price, avg_price, competitors):
+    """Generate sales talking points for beating competitor offers."""
+    points = []
+
+    if not avg_price or not our_price:
+        return points
+
+    if our_price < avg_price:
+        diff = avg_price - our_price
+        pct = round((diff / avg_price) * 100, 1)
+        points.append({
+            "type": "PRICE_WIN",
+            "message": f"We're ${diff:,} CHEAPER than the market average ({pct}% below)",
+            "strength": "HIGH",
+        })
+    elif our_price > avg_price:
+        diff = our_price - avg_price
+        points.append({
+            "type": "PRICE_CONCERN",
+            "message": f"We're ${diff:,} above market average",
+            "suggestion": "Highlight service, warranty, or condition to justify premium",
+            "strength": "MEDIUM",
+        })
+
+    # Find highest/lowest
+    if competitors:
+        lowest = min([c for c in competitors if c.get("price")], key=lambda x: x["price"], default=None)
+        if lowest:
+            points.append({
+                "type": "MARKET_INSIGHT",
+                "message": f"Lowest price in market: ${lowest['price']:,} ({lowest.get('dealer_name', 'Unknown')})",
+                "strength": "INFO",
+            })
+
+    return points
+
+
 # Trade-In Oracle - Snap Photo or VIN for Instant Value
 class TradeInEstimate(BaseModel):
     year: int
