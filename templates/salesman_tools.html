@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full scroll-smooth">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,108 +7,222 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
   <style>
-    [x-cloak]{display:none!important}
-    body{font-family:Inter,system-ui,sans-serif}
-    /* Mobile optimizations */
+    [x-cloak] { display: none !important; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Input & Button standardization */
     input, select, textarea {
-      font-size: 16px !important; /* Prevents zoom on iOS */
-      padding: 12px !important;
+      font-size: 16px !important;
+      padding: 12px 14px !important;
+      transition: all 0.2s ease;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none !important;
+      border-color: #2563eb !important;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
     }
     button {
-      min-height: 48px !important; /* Touch-friendly button size */
+      min-height: 48px !important;
       font-size: 16px !important;
+      -webkit-user-select: none;
+      user-select: none;
+      transition: all 0.2s ease;
     }
-    /* Prevent text selection on buttons */
-    button { -webkit-user-select: none; user-select: none; }
-    /* Better scrolling on mobile */
+    button:disabled {
+      opacity: 0.6 !important;
+      cursor: not-allowed !important;
+    }
+    button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    /* Smooth scrolling */
     .overflow-x-auto { -webkit-overflow-scrolling: touch; }
-    /* Badge styling */
-    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; }
+    .overflow-y-auto { -webkit-overflow-scrolling: touch; }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    /* Card elevation */
+    .card {
+      background: white;
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.05);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      transition: all 0.2s ease;
+    }
+    .card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      border-color: rgba(0,0,0,0.08);
+    }
+
+    /* Value display */
+    .value-display {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Stat box */
+    .stat-box {
+      background: linear-gradient(135deg, #f0f9ff 0%, #f0f3ff 100%);
+      border: 1px solid #e0e7ff;
+      border-radius: 10px;
+      padding: 16px;
+      transition: all 0.2s ease;
+    }
+
+    /* Loading animation */
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .animate-pulse-soft {
+      animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
   </style>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-slate-100 min-h-screen" x-data="salesmanTools()" x-init="init()" x-cloak>
+<body class="bg-slate-50 min-h-screen" x-data="salesmanTools()" x-init="init()" x-cloak>
 
-<!-- Nav - Mobile Responsive -->
-<div class="sticky top-0 bg-white shadow-sm border-b border-slate-200 z-10">
-  <div class="max-w-4xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between">
-    <h1 class="text-base sm:text-lg font-bold text-slate-800 truncate">⚡ Salesman Tools</h1>
-    <div class="text-xs sm:text-xs text-slate-400 ml-2 shrink-0" x-text="username"></div>
+<!-- Header -->
+<div class="sticky top-0 bg-white border-b border-slate-200 z-10">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
+        <span class="text-white font-bold text-lg">⚡</span>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-slate-900">Salesman Tools</h1>
+        <p class="text-xs text-slate-500">Professional sales utilities</p>
+      </div>
+    </div>
+    <div class="text-sm text-slate-600 font-medium" x-text="username"></div>
   </div>
 </div>
 
-<div class="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 pb-8">
+<div class="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6 pb-12">
 
-  <!-- Tab Navigation - Mobile Optimized -->
-  <div class="flex gap-1 sm:gap-2 overflow-x-auto pb-2 -mx-3 sm:mx-0 px-3 sm:px-0">
-    <button @click="tab='commission'" :class="tab==='commission'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
-      💰 <span class="hidden sm:inline">Commission</span>
+  <!-- Tab Navigation -->
+  <div class="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+    <button @click="tab='commission'" :class="tab==='commission'?'bg-blue-600 text-white shadow-lg':'bg-white text-slate-700 border border-slate-300 hover:border-slate-400'" class="px-4 py-2.5 rounded-lg font-semibold text-sm shrink-0 transition active:scale-95 whitespace-nowrap">
+      💰 Commission
     </button>
-    <button @click="tab='payment'" :class="tab==='payment'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
-      📊 <span class="hidden sm:inline">Payment</span>
+    <button @click="tab='payment'" :class="tab==='payment'?'bg-blue-600 text-white shadow-lg':'bg-white text-slate-700 border border-slate-300 hover:border-slate-400'" class="px-4 py-2.5 rounded-lg font-semibold text-sm shrink-0 transition active:scale-95 whitespace-nowrap">
+      📊 Payment
     </button>
-    <button @click="tab='beatthem'" :class="tab==='beatthem'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
-      ⚔️ <span class="hidden sm:inline">Beat</span>
+    <button @click="tab='beatthem'" :class="tab==='beatthem'?'bg-blue-600 text-white shadow-lg':'bg-white text-slate-700 border border-slate-300 hover:border-slate-400'" class="px-4 py-2.5 rounded-lg font-semibold text-sm shrink-0 transition active:scale-95 whitespace-nowrap">
+      ⚔️ Beat Them
     </button>
-    <button @click="tab='killer'" :class="tab==='killer'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
-      🎯 <span class="hidden sm:inline">Killer</span>
+    <button @click="tab='killer'" :class="tab==='killer'?'bg-blue-600 text-white shadow-lg':'bg-white text-slate-700 border border-slate-300 hover:border-slate-400'" class="px-4 py-2.5 rounded-lg font-semibold text-sm shrink-0 transition active:scale-95 whitespace-nowrap">
+      🎯 Deal Killer
     </button>
-    <button @click="tab='trade'" :class="tab==='trade'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
-      🚗 <span class="hidden sm:inline">Trade</span>
+    <button @click="tab='trade'" :class="tab==='trade'?'bg-blue-600 text-white shadow-lg':'bg-white text-slate-700 border border-slate-300 hover:border-slate-400'" class="px-4 py-2.5 rounded-lg font-semibold text-sm shrink-0 transition active:scale-95 whitespace-nowrap">
+      🚗 Trade-In
     </button>
-    <button @click="tab='inventory'" :class="tab==='inventory'?'bg-blue-600 text-white':'bg-white text-slate-700 border border-slate-200'" class="px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-bold text-xs sm:text-sm shrink-0 transition hover:shadow-md active:scale-95 whitespace-nowrap">
-      📦 <span class="hidden sm:inline">Inv</span>
+    <button @click="tab='inventory'" :class="tab==='inventory'?'bg-blue-600 text-white shadow-lg':'bg-white text-slate-700 border border-slate-300 hover:border-slate-400'" class="px-4 py-2.5 rounded-lg font-semibold text-sm shrink-0 transition active:scale-95 whitespace-nowrap">
+      📦 Inventory
     </button>
   </div>
 
   <!-- COMMISSION CALCULATOR TAB -->
-  <div x-show="tab==='commission'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
-    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Commission Calculator</h2>
-    <p class="text-xs sm:text-sm text-slate-500">Calculate your commission instantly</p>
+  <div x-show="tab==='commission'" class="card p-6 space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-slate-900">Commission Calculator</h2>
+      <p class="text-sm text-slate-500 mt-1">Real-time commission & gross profit analysis</p>
+    </div>
 
-    <div class="space-y-3">
+    <div class="space-y-4">
       <div>
-        <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Selling Price</label>
-        <input type="number" x-model.number="commission.basePrice" placeholder="28500" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+        <label class="block text-sm font-semibold text-slate-800 mb-2">Selling Price</label>
+        <input type="number" x-model.number="commission.basePrice" placeholder="28,500" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
       </div>
-      <div class="grid grid-cols-2 gap-3">
+
+      <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Addendum</label>
-          <input type="number" x-model.number="commission.addendum" placeholder="1995" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Addendum</label>
+          <input type="number" x-model.number="commission.addendum" placeholder="1,995" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
         <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Cost</label>
-          <input type="number" x-model.number="commission.cost" placeholder="22000" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Pack</label>
-          <input type="number" x-model.number="commission.pack" placeholder="500" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
-        </div>
-        <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Trade-In</label>
-          <input type="number" x-model.number="commission.tradeIn" placeholder="5000" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Cost</label>
+          <input type="number" x-model.number="commission.cost" placeholder="22,000" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
       </div>
-      <button @click="calculateCommission()" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition active:scale-95">
-        Calculate
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Pack</label>
+          <input type="number" x-model.number="commission.pack" placeholder="500" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Trade-In Credit</label>
+          <input type="number" x-model.number="commission.tradeIn" placeholder="5,000" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+        </div>
+      </div>
+
+      <button @click="calculateCommission()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition active:scale-95 shadow-lg hover:shadow-xl">
+        Calculate Commission
       </button>
     </div>
 
     <template x-if="commission.result">
-      <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-4 sm:p-6 space-y-3">
-        <div class="text-center">
-          <p class="text-xs sm:text-sm text-slate-600 font-semibold">YOUR COMMISSION</p>
-          <p class="text-3xl sm:text-4xl font-black text-green-700">$<span x-text="Number(commission.result.commission).toLocaleString()"></span></p>
+      <div class="space-y-4 pt-6 border-t border-slate-200">
+        <!-- Commission Display -->
+        <div class="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 rounded-xl p-6">
+          <p class="text-sm font-semibold text-emerald-700 mb-2">YOUR COMMISSION</p>
+          <p class="text-4xl font-black text-emerald-700 value-display">$<span x-text="Number(commission.result.commission).toLocaleString()"></span></p>
+          <p class="text-xs text-emerald-600 mt-1" x-text="'At 20% of ' + '$' + Number(commission.result.gross).toLocaleString() + ' gross'"></p>
         </div>
-        <div class="grid grid-cols-2 gap-2 text-xs sm:text-sm">
-          <div class="bg-white rounded p-3">
-            <p class="text-slate-500 text-xs">Gross Profit</p>
-            <p class="font-bold text-slate-800">$<span x-text="Number(commission.result.gross).toLocaleString()"></span></p>
+
+        <!-- Breakdown -->
+        <div class="grid grid-cols-3 gap-3">
+          <div class="stat-box">
+            <p class="text-xs font-semibold text-slate-700 mb-1">Total Selling</p>
+            <p class="text-lg font-bold text-slate-900 value-display">$<span x-text="Number(commission.result.base_price + commission.result.addendum).toLocaleString()"></span></p>
           </div>
-          <div class="bg-white rounded p-3">
-            <p class="text-slate-500 text-xs">Margin</p>
-            <p class="font-bold text-slate-800" x-text="commission.result.margin_pct.toFixed(1) + '%'"></p>
+          <div class="stat-box">
+            <p class="text-xs font-semibold text-slate-700 mb-1">Gross Profit</p>
+            <p class="text-lg font-bold text-slate-900 value-display">$<span x-text="Number(commission.result.gross).toLocaleString()"></span></p>
+          </div>
+          <div class="stat-box">
+            <p class="text-xs font-semibold text-slate-700 mb-1">Margin %</p>
+            <p class="text-lg font-bold text-slate-900 value-display"><span x-text="commission.result.margin_pct.toFixed(1)"></span>%</p>
+          </div>
+        </div>
+
+        <!-- Detailed Breakdown -->
+        <div class="bg-slate-50 rounded-lg p-4 space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-slate-700">Base Price:</span>
+            <span class="font-mono font-semibold text-slate-900 value-display">$<span x-text="Number(commission.result.base_price).toLocaleString()"></span></span>
+          </div>
+          <div class="flex justify-between text-slate-700">
+            <span>+ Addendum:</span>
+            <span class="font-mono font-semibold text-slate-900 value-display">+$<span x-text="Number(commission.result.addendum).toLocaleString()"></span></span>
+          </div>
+          <div class="flex justify-between border-t border-slate-200 pt-2">
+            <span class="text-slate-700">Selling Price:</span>
+            <span class="font-mono font-semibold text-slate-900 value-display">$<span x-text="Number(commission.result.base_price + commission.result.addendum).toLocaleString()"></span></span>
+          </div>
+          <div class="flex justify-between text-slate-700">
+            <span>- Cost:</span>
+            <span class="font-mono font-semibold text-slate-900 value-display">-$<span x-text="Number(commission.result.cost).toLocaleString()"></span></span>
+          </div>
+          <div class="flex justify-between text-slate-700">
+            <span>- Pack:</span>
+            <span class="font-mono font-semibold text-slate-900 value-display">-$<span x-text="Number(commission.result.pack).toLocaleString()"></span></span>
+          </div>
+          <div class="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900">
+            <span>Gross Profit:</span>
+            <span class="text-emerald-600 value-display">$<span x-text="Number(commission.result.gross).toLocaleString()"></span></span>
           </div>
         </div>
       </div>
@@ -116,68 +230,100 @@
   </div>
 
   <!-- PAYMENT ESTIMATOR TAB -->
-  <div x-show="tab==='payment'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
-    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Payment Estimator</h2>
-    <p class="text-xs sm:text-sm text-slate-500">Show customer their monthly payment</p>
+  <div x-show="tab==='payment'" class="card p-6 space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-slate-900">Payment Estimator</h2>
+      <p class="text-sm text-slate-500 mt-1">Calculate exact monthly payments for customers</p>
+    </div>
 
-    <div class="space-y-3">
+    <div class="space-y-4">
       <div>
-        <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Vehicle Price</label>
-        <input type="number" x-model.number="payment.price" placeholder="28500" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+        <label class="block text-sm font-semibold text-slate-800 mb-2">Vehicle Price</label>
+        <input type="number" x-model.number="payment.price" placeholder="28,500" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
       </div>
-      <div class="grid grid-cols-2 gap-3">
+
+      <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Down Payment</label>
-          <input type="number" x-model.number="payment.downPayment" placeholder="3000" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Down Payment</label>
+          <input type="number" x-model.number="payment.downPayment" placeholder="3,000" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
         <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">APR %</label>
-          <input type="number" x-model.number="payment.apr" placeholder="6.5" step="0.1" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">APR %</label>
+          <input type="number" x-model.number="payment.apr" placeholder="6.5" step="0.1" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-3">
+
+      <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Term</label>
-          <select x-model.number="payment.months" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
-            <option value="48">48 mo</option>
-            <option value="60">60 mo</option>
-            <option value="72">72 mo</option>
-            <option value="84">84 mo</option>
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Term</label>
+          <select x-model.number="payment.months" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+            <option value="48">48 months</option>
+            <option value="60">60 months</option>
+            <option value="72">72 months</option>
+            <option value="84">84 months</option>
           </select>
         </div>
         <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Doc Fee</label>
-          <input type="number" x-model.number="payment.docFee" placeholder="299" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Doc Fee</label>
+          <input type="number" x-model.number="payment.docFee" placeholder="299" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
       </div>
-      <button @click="calculatePayment()" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition active:scale-95">
+
+      <button @click="calculatePayment()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition active:scale-95 shadow-lg hover:shadow-xl">
         Calculate Payment
       </button>
     </div>
 
     <template x-if="payment.result">
-      <div class="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-300 rounded-xl p-6 space-y-4">
-        <div class="text-center">
-          <p class="text-sm text-slate-600 font-semibold">MONTHLY PAYMENT</p>
-          <p class="text-5xl font-black text-purple-700">$<span x-text="Number(Math.round(payment.result.monthly_payment)).toLocaleString()"></span></p>
-          <p class="text-xs text-slate-500 mt-1" x-text="payment.result.term_months + ' months @ ' + payment.result.apr + '% APR'"></p>
+      <div class="space-y-4 pt-6 border-t border-slate-200">
+        <!-- Payment Display -->
+        <div class="bg-gradient-to-br from-violet-50 to-purple-50 border-2 border-violet-200 rounded-xl p-6">
+          <p class="text-sm font-semibold text-violet-700 mb-2">MONTHLY PAYMENT</p>
+          <div class="flex items-baseline gap-2">
+            <p class="text-5xl font-black text-violet-700 value-display">$<span x-text="Number(Math.round(payment.result.monthly_payment)).toLocaleString()"></span></p>
+            <p class="text-sm text-violet-600" x-text="'per month'"></p>
+          </div>
+          <p class="text-xs text-violet-600 mt-2" x-text="payment.result.term_months + ' months at ' + payment.result.apr + '% APR'"></p>
         </div>
-        <div class="grid grid-cols-2 gap-2 text-sm">
-          <div class="bg-white rounded p-2">
-            <p class="text-slate-500 text-xs">Out The Door</p>
-            <p class="font-bold">$<span x-text="Number(payment.result.out_the_door).toLocaleString()"></span></p>
+
+        <!-- Key Details -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="stat-box">
+            <p class="text-xs font-semibold text-slate-700 mb-1">Out The Door</p>
+            <p class="text-lg font-bold text-slate-900 value-display">$<span x-text="Number(payment.result.out_the_door).toLocaleString()"></span></p>
           </div>
-          <div class="bg-white rounded p-2">
-            <p class="text-slate-500 text-xs">Amount Financed</p>
-            <p class="font-bold">$<span x-text="Number(payment.result.amount_financed).toLocaleString()"></span></p>
+          <div class="stat-box">
+            <p class="text-xs font-semibold text-slate-700 mb-1">Down Payment</p>
+            <p class="text-lg font-bold text-slate-900 value-display">$<span x-text="Number(payment.result.down_payment).toLocaleString()"></span></p>
           </div>
-          <div class="bg-white rounded p-2">
-            <p class="text-slate-500 text-xs">Total Interest</p>
-            <p class="font-bold">$<span x-text="Number(payment.result.total_interest).toLocaleString()"></span></p>
+          <div class="stat-box">
+            <p class="text-xs font-semibold text-slate-700 mb-1">Amount Financed</p>
+            <p class="text-lg font-bold text-slate-900 value-display">$<span x-text="Number(payment.result.amount_financed).toLocaleString()"></span></p>
           </div>
-          <div class="bg-white rounded p-2">
-            <p class="text-slate-500 text-xs">Down Payment</p>
-            <p class="font-bold">$<span x-text="Number(payment.result.down_payment).toLocaleString()"></span></p>
+          <div class="stat-box">
+            <p class="text-xs font-semibold text-slate-700 mb-1">Total Interest</p>
+            <p class="text-lg font-bold text-slate-900 value-display">$<span x-text="Number(payment.result.total_interest).toLocaleString()"></span></p>
+          </div>
+        </div>
+
+        <!-- Breakdown -->
+        <div class="bg-slate-50 rounded-lg p-4 space-y-2 text-sm">
+          <p class="font-bold text-slate-900 mb-3">Price Breakdown</p>
+          <div class="flex justify-between">
+            <span class="text-slate-700">Vehicle Price:</span>
+            <span class="font-mono font-semibold text-slate-900 value-display">$<span x-text="Number(payment.result.vehicle_price).toLocaleString()"></span></span>
+          </div>
+          <div class="flex justify-between text-slate-700">
+            <span>Sales Tax:</span>
+            <span class="font-mono font-semibold text-slate-900 value-display">$<span x-text="Number(payment.result.tax).toLocaleString()"></span></span>
+          </div>
+          <div class="flex justify-between text-slate-700">
+            <span>Doc Fee:</span>
+            <span class="font-mono font-semibold text-slate-900 value-display">$<span x-text="Number(payment.result.doc_fee).toLocaleString()"></span></span>
+          </div>
+          <div class="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900">
+            <span>Out The Door:</span>
+            <span class="text-violet-600 value-display">$<span x-text="Number(payment.result.out_the_door).toLocaleString()"></span></span>
           </div>
         </div>
       </div>
@@ -185,75 +331,78 @@
   </div>
 
   <!-- BEAT THEM TAB -->
-  <div x-show="tab==='beatthem'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
-    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Beat Them</h2>
-    <p class="text-xs sm:text-sm text-slate-500">Customer saw one cheaper? Find & crush competitors.</p>
+  <div x-show="tab==='beatthem'" class="card p-6 space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-slate-900">Beat Them</h2>
+      <p class="text-sm text-slate-500 mt-1">Find competitor vehicles & crush pricing objections</p>
+    </div>
 
-    <div class="space-y-3 bg-slate-50 p-4 rounded-lg">
-      <p class="text-xs font-semibold text-slate-600 mb-3">Competitor Vehicle</p>
-      <div class="grid grid-cols-2 gap-3">
+    <div class="bg-slate-50 rounded-xl p-5 space-y-4 border border-slate-200">
+      <p class="text-sm font-semibold text-slate-800">What vehicle did the customer see?</p>
+      <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-2">Year</label>
-          <input type="number" x-model.number="beatThem.year" placeholder="2023" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Year</label>
+          <input type="number" x-model.number="beatThem.year" placeholder="2023" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-2">Make</label>
-          <input type="text" x-model="beatThem.make" placeholder="INFINITI" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Make</label>
+          <input type="text" x-model="beatThem.make" placeholder="INFINITI" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-2">Model</label>
-          <input type="text" x-model="beatThem.model" placeholder="Q5" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Model</label>
+          <input type="text" x-model="beatThem.model" placeholder="Q5" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-2">Trim</label>
-          <input type="text" x-model="beatThem.trim" placeholder="Premium" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Trim (optional)</label>
+          <input type="text" x-model="beatThem.trim" placeholder="Premium" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
       </div>
       <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-2">Our VIN</label>
-        <input type="text" x-model="beatThem.ourVin" placeholder="JTHBX1C26G..." class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+        <label class="block text-sm font-semibold text-slate-800 mb-2">Your VIN (to compare)</label>
+        <input type="text" x-model="beatThem.ourVin" placeholder="JTHBX1C26G5..." class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
       </div>
-      <button @click="findCompetitors()" :disabled="beatThemLoading" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 active:scale-95">
-        <span x-show="!beatThemLoading">Search</span>
-        <span x-show="beatThemLoading">Searching…</span>
+      <button @click="findCompetitors()" :disabled="beatThemLoading" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 active:scale-95 shadow-lg hover:shadow-xl">
+        <span x-show="!beatThemLoading">🔍 Search Competitors</span>
+        <span x-show="beatThemLoading" class="inline-block animate-pulse-soft">Searching market…</span>
       </button>
     </div>
 
     <!-- Results -->
     <template x-if="beatThem.results">
-      <div class="space-y-4">
-        <!-- Summary Stats -->
-        <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-4">
-          <div class="grid grid-cols-2 gap-2 text-xs sm:text-sm">
-            <div class="bg-white rounded p-3">
-              <p class="text-xs text-slate-500">Total Found</p>
-              <p class="text-xl sm:text-2xl font-bold text-slate-800" x-text="beatThem.results.summary.total_found"></p>
+      <div class="space-y-5 pt-2 border-t border-slate-200">
+        <!-- Summary Card -->
+        <div class="bg-gradient-to-br from-orange-50 to-red-50 border-2 border-orange-200 rounded-xl p-6">
+          <div class="grid grid-cols-3 gap-4">
+            <div class="text-center">
+              <p class="text-xs font-semibold text-orange-700 mb-2">COMPETITORS</p>
+              <p class="text-3xl font-bold text-orange-900" x-text="beatThem.results.summary.total_found"></p>
             </div>
-            <div class="bg-white rounded p-3">
-              <p class="text-xs text-slate-500">Avg Price</p>
-              <p class="text-base sm:text-lg font-bold text-slate-800">$<span x-text="Number(beatThem.results.summary.avg_competitor_price).toLocaleString()"></span></p>
+            <div class="text-center border-l border-r border-orange-200">
+              <p class="text-xs font-semibold text-orange-700 mb-2">AVG PRICE</p>
+              <p class="text-2xl font-bold text-orange-900 value-display">$<span x-text="Number(beatThem.results.summary.avg_competitor_price || 0).toLocaleString()"></span></p>
+            </div>
+            <div class="text-center">
+              <p class="text-xs font-semibold text-orange-700 mb-2">LOWEST</p>
+              <p class="text-2xl font-bold text-orange-900 value-display">$<span x-text="Number(beatThem.results.summary.min_competitor_price || 0).toLocaleString()"></span></p>
             </div>
           </div>
 
           <template x-if="beatThem.results.our_vehicle && beatThem.results.our_vehicle.price">
-            <div class="mt-3 pt-3 border-t border-red-200">
-              <p class="text-xs text-slate-600 mb-3 font-bold">OUR POSITION</p>
-              <div class="grid grid-cols-3 gap-2 text-center text-xs">
-                <div>
-                  <p class="text-slate-500 mb-1">Our Price</p>
-                  <p class="font-bold text-sm sm:text-base" x-text="'$' + Number(beatThem.results.our_vehicle.price).toLocaleString()"></p>
+            <div class="mt-5 pt-5 border-t border-orange-300">
+              <p class="text-sm font-bold text-orange-900 mb-3">YOUR POSITIONING</p>
+              <div class="bg-white rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-slate-700 font-semibold">Our Price:</span>
+                  <span class="text-lg font-bold text-slate-900 value-display">$<span x-text="Number(beatThem.results.our_vehicle.price).toLocaleString()"></span></span>
                 </div>
-                <div>
-                  <p class="text-2xl font-black" :class="beatThem.results.summary.market_position==='BELOW'?'text-green-600':'text-red-600'"
-                    x-text="beatThem.results.summary.market_position==='BELOW'?'✓':'✗'"></p>
-                  <p class="text-slate-600" x-text="beatThem.results.summary.market_position"></p>
-                </div>
-                <div>
-                  <p class="text-slate-500 mb-1">Advantage</p>
-                  <p class="font-bold text-sm sm:text-base" :class="beatThem.results.summary.market_position==='BELOW'?'text-green-600':'text-red-600'"
-                    x-text="'$' + Math.abs(beatThem.results.summary.price_advantage).toLocaleString()"></p>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-700 font-semibold">Market Position:</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-2xl" :class="beatThem.results.summary.market_position==='BELOW'?'text-green-600':'text-red-600'" x-text="beatThem.results.summary.market_position==='BELOW'?'✓':'⚠️'"></span>
+                    <span class="font-bold" :class="beatThem.results.summary.market_position==='BELOW'?'text-green-700':'text-red-700'" x-text="beatThem.results.summary.market_position + ' by $' + Math.abs(beatThem.results.summary.price_advantage).toLocaleString()"></span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -263,55 +412,49 @@
         <!-- Talking Points -->
         <template x-if="beatThem.results.talking_points && beatThem.results.talking_points.length > 0">
           <div class="space-y-2">
-            <p class="text-sm font-bold text-slate-700">💬 Your Talking Points</p>
+            <p class="text-sm font-bold text-slate-900">💬 Your Talking Points</p>
             <template x-for="pt in beatThem.results.talking_points" :key="pt.message">
-              <div class="bg-green-50 border border-green-200 rounded-lg p-3">
-                <p class="text-xs font-semibold text-green-700 mb-1" x-text="pt.type"></p>
-                <p class="text-sm text-slate-700 font-semibold" x-text="pt.message"></p>
+              <div :class="pt.type==='PRICE_WIN'?'bg-green-50 border-green-200':'bg-amber-50 border-amber-200'" class="border rounded-lg p-4">
+                <p class="text-xs font-bold uppercase mb-1" :class="pt.type==='PRICE_WIN'?'text-green-700':'text-amber-700'" x-text="pt.type.replace(/_/g, ' ')"></p>
+                <p class="text-sm font-semibold text-slate-900" x-text="pt.message"></p>
                 <template x-if="pt.suggestion">
-                  <p class="text-xs text-slate-600 mt-1">💡 <span x-text="pt.suggestion"></span></p>
+                  <p class="text-xs text-slate-600 mt-2">→ <span x-text="pt.suggestion"></span></p>
                 </template>
               </div>
             </template>
           </div>
         </template>
 
-        <!-- Competitor List -->
+        <!-- Competitor Listings -->
         <div class="space-y-2">
-          <p class="text-xs sm:text-sm font-bold text-slate-700" x-text="beatThem.results.competitors.length + ' listings'"></p>
-          <div class="max-h-96 overflow-y-auto space-y-2">
-            <template x-for="(comp, idx) in beatThem.results.competitors.slice(0, 10)" :key="idx">
-              <div class="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition cursor-pointer">
-                <div class="flex items-start justify-between gap-2 mb-2">
+          <p class="text-sm font-bold text-slate-900" x-text="beatThem.results.competitors.length + ' matching listings found'"></p>
+          <div class="max-h-[500px] overflow-y-auto space-y-2 pr-2">
+            <template x-for="(comp, idx) in beatThem.results.competitors.slice(0, 15)" :key="idx">
+              <div class="card p-4 hover:shadow-md transition">
+                <div class="flex items-start justify-between gap-3 mb-3">
                   <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-xs sm:text-sm text-slate-800 line-clamp-2" x-text="comp.heading"></p>
-                    <p class="text-xs text-slate-500 line-clamp-1" x-text="comp.dealer_name + (comp.dealer_city ? ', ' + comp.dealer_city : '')"></p>
+                    <p class="font-semibold text-sm text-slate-900 line-clamp-2" x-text="comp.heading"></p>
+                    <p class="text-xs text-slate-500 mt-1" x-text="comp.dealer_name + (comp.dealer_city ? ', ' + comp.dealer_city : '')"></p>
                   </div>
-                  <div class="shrink-0 ml-2">
-                    <template x-if="comp.beats_us">
-                      <span class="badge bg-red-100 text-red-700 text-xs px-2 py-1">🔴</span>
-                    </template>
-                    <template x-if="comp.vs_our_price !== undefined && !comp.beats_us">
-                      <span class="badge bg-green-100 text-green-700 text-xs px-2 py-1">✓</span>
+                  <div class="shrink-0">
+                    <template x-if="comp.vs_our_price !== undefined">
+                      <span class="badge" :class="comp.beats_us?'bg-red-100 text-red-700':'bg-green-100 text-green-700'" x-text="comp.beats_us?'⚠️ Beats Us':'+$' + Number(Math.abs(comp.vs_our_price)).toLocaleString()"></span>
                     </template>
                   </div>
                 </div>
                 <div class="grid grid-cols-3 gap-2 text-xs">
                   <div>
-                    <p class="text-slate-500 text-xs">Price</p>
-                    <p class="font-bold text-slate-800">$<span x-text="Number(comp.price).toLocaleString()"></span></p>
+                    <p class="text-slate-600">Price</p>
+                    <p class="font-bold text-slate-900 value-display">$<span x-text="Number(comp.price).toLocaleString()"></span></p>
                   </div>
                   <div>
-                    <p class="text-slate-500 text-xs">Miles</p>
-                    <p class="font-bold text-xs" x-text="comp.miles ? (Number(comp.miles)/1000).toFixed(0)+'K' : '—'"></p>
+                    <p class="text-slate-600">Miles</p>
+                    <p class="font-bold text-slate-900" x-text="comp.miles ? (Number(comp.miles)/1000).toFixed(1)+'K' : '—'"></p>
                   </div>
-                  <template x-if="comp.vs_our_price !== undefined">
-                    <div>
-                      <p class="text-slate-500 text-xs">vs Us</p>
-                      <p class="font-bold text-xs" :class="comp.beats_us?'text-red-600':'text-green-600'"
-                        x-text="(comp.vs_our_price > 0 ? '+' : '') + '$' + (Math.abs(comp.vs_our_price)/1000).toFixed(1)+'K'"></p>
-                    </div>
-                  </template>
+                  <div>
+                    <p class="text-slate-600">Trim</p>
+                    <p class="font-bold text-slate-900 truncate" x-text="comp.trim || '—'"></p>
+                  </div>
                 </div>
               </div>
             </template>
@@ -321,65 +464,105 @@
     </template>
 
     <template x-if="beatThemError">
-      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
         <p class="text-sm text-red-700 font-semibold" x-text="beatThemError"></p>
       </div>
     </template>
   </div>
 
   <!-- DEAL KILLER TAB -->
-  <div x-show="tab==='killer'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
-    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Deal Killer</h2>
-    <p class="text-xs sm:text-sm text-slate-500">Crush objections with data</p>
+  <div x-show="tab==='killer'" class="card p-6 space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-slate-900">Deal Killer</h2>
+      <p class="text-sm text-slate-500 mt-1">Get market intel & objection responses in seconds</p>
+    </div>
 
     <div>
-      <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Enter VIN</label>
-      <div class="flex flex-col sm:flex-row gap-2">
-        <input type="text" x-model="killer.vin" placeholder="JTHBX1C26G..." class="flex-1 px-4 py-3 border border-slate-300 rounded-lg text-base">
-        <button @click="getKillerData()" :disabled="killerLoading" class="bg-blue-600 text-white font-bold px-6 py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 active:scale-95 whitespace-nowrap">
-          <span x-show="!killerLoading">Search</span>
-          <span x-show="killerLoading">…</span>
+      <label class="block text-sm font-semibold text-slate-800 mb-2">Enter Vehicle VIN</label>
+      <div class="flex gap-2">
+        <input type="text" x-model="killer.vin" placeholder="JTHBX1C26G5..." class="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100" @keydown.enter="getKillerData()">
+        <button @click="getKillerData()" :disabled="killerLoading" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-lg transition disabled:opacity-50 active:scale-95 shadow-lg hover:shadow-xl whitespace-nowrap">
+          <span x-show="!killerLoading">Analyze</span>
+          <span x-show="killerLoading" class="inline-block animate-pulse-soft">Loading…</span>
         </button>
       </div>
     </div>
 
     <template x-if="killer.result">
-      <div class="space-y-4">
-        <!-- Vehicle Info -->
-        <div class="bg-slate-50 rounded-lg p-4">
-          <p class="text-sm text-slate-500">Vehicle</p>
-          <p class="font-bold text-lg" x-text="killer.result.vehicle.year + ' ' + killer.result.vehicle.make + ' ' + killer.result.vehicle.model + ' ' + killer.result.vehicle.trim"></p>
-          <div class="grid grid-cols-2 gap-2 mt-2 text-sm">
-            <div><span class="text-slate-500">Mileage:</span> <span class="font-semibold" x-text="Number(killer.result.vehicle.mileage || 0).toLocaleString() + ' mi'"></span></div>
-            <div><span class="text-slate-500">Our Price:</span> <span class="font-bold text-emerald-700">$<span x-text="Number(killer.result.vehicle.our_price).toLocaleString()"></span></span></div>
+      <div class="space-y-5 pt-2 border-t border-slate-200">
+        <!-- Vehicle Header -->
+        <div class="bg-slate-50 rounded-lg p-5 border border-slate-200">
+          <p class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Vehicle Details</p>
+          <p class="text-xl font-bold text-slate-900" x-text="killer.result.vehicle.year + ' ' + killer.result.vehicle.make + ' ' + killer.result.vehicle.model"></p>
+          <p class="text-sm text-slate-600 mt-1" x-text="killer.result.vehicle.trim ? 'Trim: ' + killer.result.vehicle.trim : ''"></p>
+          <div class="grid grid-cols-2 gap-3 mt-4">
+            <div>
+              <p class="text-xs text-slate-600 mb-1">Mileage</p>
+              <p class="text-lg font-bold text-slate-900 value-display" x-text="Number(killer.result.vehicle.mileage || 0).toLocaleString() + ' mi'"></p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-600 mb-1">Our Price</p>
+              <p class="text-lg font-bold text-emerald-600 value-display">$<span x-text="Number(killer.result.vehicle.our_price).toLocaleString()"></span></p>
+            </div>
           </div>
         </div>
 
-        <!-- Market Intelligence -->
+        <!-- Market Intelligence Card -->
         <template x-if="killer.result.pricing_intelligence">
-          <div class="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-lg p-4">
-            <p class="text-sm font-bold text-orange-700 mb-3">Market Intelligence 🎯</p>
-            <div class="grid grid-cols-2 gap-3 text-sm">
+          <div class="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl p-6">
+            <p class="text-sm font-bold text-blue-900 mb-4">📊 Market Intelligence</p>
+            <div class="grid grid-cols-2 gap-4">
               <div>
-                <p class="text-slate-600 text-xs">Market Avg</p>
-                <p class="font-bold text-lg">$<span x-text="Number(killer.result.pricing_intelligence.market_avg).toLocaleString()"></span></p>
+                <p class="text-xs text-blue-700 font-semibold mb-1">Market Average</p>
+                <p class="text-2xl font-bold text-blue-900 value-display">$<span x-text="Number(killer.result.pricing_intelligence.market_avg).toLocaleString()"></span></p>
               </div>
               <div>
-                <p class="text-slate-600 text-xs">Position</p>
-                <p class="font-bold" :class="killer.result.pricing_intelligence.price_position==='ABOVE'?'text-red-600':'text-green-600'" x-text="killer.result.pricing_intelligence.price_position + ' by $' + Math.abs(killer.result.pricing_intelligence.difference).toLocaleString()"></p>
+                <p class="text-xs text-blue-700 font-semibold mb-1">Our Position</p>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-2xl font-bold" :class="killer.result.pricing_intelligence.price_position==='ABOVE'?'text-red-600':'text-green-600'" x-text="killer.result.pricing_intelligence.price_position==='ABOVE'?'↑':'↓'"></span>
+                  <div>
+                    <p class="text-xs text-blue-700">By <span x-text="'$' + Math.abs(killer.result.pricing_intelligence.difference).toLocaleString()"></span></p>
+                    <p class="text-xs text-blue-700"><span x-text="Math.abs(killer.result.pricing_intelligence.pct_difference).toFixed(1) + '%'"></span></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4 pt-4 border-t border-blue-200">
+              <div class="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <p class="text-blue-700 mb-1">Median</p>
+                  <p class="font-bold text-blue-900 value-display">$<span x-text="Number(killer.result.pricing_intelligence.market_median).toLocaleString()"></span></p>
+                </div>
+                <div>
+                  <p class="text-blue-700 mb-1">Min</p>
+                  <p class="font-bold text-blue-900 value-display">$<span x-text="Number(killer.result.pricing_intelligence.market_min).toLocaleString()"></span></p>
+                </div>
+                <div>
+                  <p class="text-blue-700 mb-1">Max</p>
+                  <p class="font-bold text-blue-900 value-display">$<span x-text="Number(killer.result.pricing_intelligence.market_max).toLocaleString()"></span></p>
+                </div>
               </div>
             </div>
           </div>
         </template>
 
-        <!-- Objection Comebacks -->
+        <!-- Objection Responses -->
         <template x-if="killer.result.objection_responses && killer.result.objection_responses.length > 0">
-          <div class="space-y-2">
-            <p class="text-sm font-bold text-slate-700">💬 Objection Responses</p>
+          <div class="space-y-3">
+            <p class="text-sm font-bold text-slate-900">💬 Objection Comebacks</p>
             <template x-for="obj in killer.result.objection_responses" :key="obj.objection">
-              <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p class="text-xs font-semibold text-blue-700 mb-1" x-text="'Objection: ' + obj.objection"></p>
-                <p class="text-sm text-slate-700" x-text="obj.response"></p>
+              <div class="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-200 rounded-lg p-4">
+                <p class="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-2">Customer Says</p>
+                <p class="text-sm font-semibold text-slate-900 mb-3" x-text="'\"' + obj.objection + '\"'"></p>
+                <div class="bg-white rounded p-3">
+                  <p class="text-xs font-bold text-slate-700 mb-1">YOU SAY:</p>
+                  <p class="text-sm text-slate-800 leading-relaxed" x-text="obj.response"></p>
+                </div>
+                <template x-if="obj.strength">
+                  <div class="mt-2 flex items-center gap-2">
+                    <span class="text-xs font-bold px-2 py-1 rounded" :class="obj.strength==='HIGH'?'bg-green-100 text-green-700':'bg-amber-100 text-amber-700'" x-text="obj.strength + ' Strength'"></span>
+                  </div>
+                </template>
               </div>
             </template>
           </div>
@@ -388,121 +571,176 @@
     </template>
 
     <template x-if="killerError">
-      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div class="bg-red-50 border-2 border-red-200 rounded-lg p-4 mt-4">
         <p class="text-sm text-red-700 font-semibold" x-text="killerError"></p>
       </div>
     </template>
   </div>
 
-  <!-- TRADE-IN ORACLE TAB -->
-  <div x-show="tab==='trade'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
-    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Trade-In Estimator</h2>
-    <p class="text-xs sm:text-sm text-slate-500">Instant value for customer's trade</p>
+  <!-- TRADE-IN ESTIMATOR TAB -->
+  <div x-show="tab==='trade'" class="card p-6 space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-slate-900">Trade-In Estimator</h2>
+      <p class="text-sm text-slate-500 mt-1">Instant valuation for customer vehicles</p>
+    </div>
 
-    <div class="space-y-3">
-      <div class="grid grid-cols-2 gap-3">
+    <div class="space-y-4">
+      <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Year</label>
-          <input type="number" x-model.number="trade.year" placeholder="2019" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Year</label>
+          <input type="number" x-model.number="trade.year" placeholder="2019" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
         <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Make</label>
-          <input type="text" x-model="trade.make" placeholder="Honda" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Model</label>
-          <input type="text" x-model="trade.model" placeholder="Civic" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
-        </div>
-        <div>
-          <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Miles</label>
-          <input type="number" x-model.number="trade.miles" placeholder="75000" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Make</label>
+          <input type="text" x-model="trade.make" placeholder="Honda" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         </div>
       </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Model</label>
+          <input type="text" x-model="trade.model" placeholder="Civic" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-800 mb-2">Mileage</label>
+          <input type="number" x-model.number="trade.miles" placeholder="75,000" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+        </div>
+      </div>
+
       <div>
-        <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Condition</label>
-        <select x-model="trade.condition" class="w-full px-4 py-3 sm:py-2 border border-slate-300 rounded-lg text-base">
-          <option value="poor">Poor</option>
-          <option value="average">Average</option>
-          <option value="good">Good</option>
-          <option value="excellent">Excellent</option>
+        <label class="block text-sm font-semibold text-slate-800 mb-2">Vehicle Condition</label>
+        <select x-model="trade.condition" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+          <option value="poor">Poor (Major damage/repairs needed)</option>
+          <option value="average" selected>Average (Normal wear)</option>
+          <option value="good">Good (Well maintained)</option>
+          <option value="excellent">Excellent (Like new)</option>
         </select>
       </div>
-      <button @click="estimateTradeIn()" :disabled="tradeLoading" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 active:scale-95">
-        <span x-show="!tradeLoading">Get Trade-In Value</span>
-        <span x-show="tradeLoading">Calculating…</span>
+
+      <button @click="estimateTradeIn()" :disabled="tradeLoading" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 active:scale-95 shadow-lg hover:shadow-xl">
+        <span x-show="!tradeLoading">Calculate Trade-In Value</span>
+        <span x-show="tradeLoading" class="inline-block animate-pulse-soft">Valuing vehicle…</span>
       </button>
     </div>
 
     <template x-if="trade.result">
-      <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-4 sm:p-6 space-y-4">
-        <div class="text-center">
-          <p class="text-xs sm:text-sm text-slate-600 font-semibold">OFFER RANGE</p>
-          <div class="grid grid-cols-3 gap-2 sm:gap-4 mt-3">
+      <div class="space-y-4 pt-6 border-t border-slate-200">
+        <!-- Main Offer -->
+        <div class="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 rounded-xl p-6">
+          <p class="text-sm font-semibold text-emerald-700 mb-2">RECOMMENDED OFFER</p>
+          <p class="text-5xl font-black text-emerald-700 value-display">$<span x-text="(Number(trade.result.offer_range.recommended)/1000).toFixed(1)"></span>K</p>
+          <p class="text-sm text-emerald-600 mt-2" x-text="'Based on ' + trade.result.comp_count + ' comparable listings'"></p>
+        </div>
+
+        <!-- Offer Range -->
+        <div class="bg-slate-50 rounded-lg p-5 border border-slate-200">
+          <p class="text-sm font-bold text-slate-900 mb-4">Offer Strategy</p>
+          <div class="grid grid-cols-3 gap-3">
             <div class="text-center">
-              <p class="text-xs text-slate-500 mb-1">Conservative</p>
-              <p class="text-lg sm:text-xl font-bold text-slate-700">$<span x-text="(Number(trade.result.offer_range.conservative)/1000).toFixed(1)+'K'"></span></p>
+              <p class="text-xs text-slate-600 mb-2">Conservative</p>
+              <p class="text-2xl font-bold text-amber-600 value-display">$<span x-text="(Number(trade.result.offer_range.conservative)/1000).toFixed(1)"></span>K</p>
+              <p class="text-xs text-slate-500 mt-1">Safe</p>
             </div>
-            <div class="text-center border-l border-r border-green-300 px-2">
-              <p class="text-xs text-slate-500 mb-1">Recommended</p>
-              <p class="text-2xl sm:text-3xl font-black text-green-700">$<span x-text="(Number(trade.result.offer_range.recommended)/1000).toFixed(1)+'K'"></span></p>
+            <div class="text-center border-l border-r border-slate-300 px-2">
+              <p class="text-xs text-slate-600 mb-2">Recommended</p>
+              <p class="text-3xl font-black text-emerald-600 value-display">$<span x-text="(Number(trade.result.offer_range.recommended)/1000).toFixed(1)"></span>K</p>
+              <p class="text-xs text-slate-500 mt-1">Best</p>
             </div>
             <div class="text-center">
-              <p class="text-xs text-slate-500 mb-1">Aggressive</p>
-              <p class="text-lg sm:text-xl font-bold text-slate-700">$<span x-text="(Number(trade.result.offer_range.aggressive)/1000).toFixed(1)+'K'"></span></p>
+              <p class="text-xs text-slate-600 mb-2">Aggressive</p>
+              <p class="text-2xl font-bold text-red-600 value-display">$<span x-text="(Number(trade.result.offer_range.aggressive)/1000).toFixed(1)"></span>K</p>
+              <p class="text-xs text-slate-500 mt-1">Competitive</p>
             </div>
+          </div>
+        </div>
+
+        <!-- Valuation Breakdown -->
+        <div class="bg-slate-50 rounded-lg p-4 space-y-2 text-sm border border-slate-200">
+          <p class="font-bold text-slate-900 mb-3">Valuation Factors</p>
+          <div class="flex justify-between">
+            <span class="text-slate-700">Market Base Value:</span>
+            <span class="font-bold text-slate-900 value-display">$<span x-text="Number(trade.result.market_median).toLocaleString()"></span></span>
+          </div>
+          <div class="flex justify-between text-slate-700">
+            <span>Condition Adjustment:</span>
+            <span class="font-bold text-slate-900" x-text="trade.result.breakdown.condition_adjustment"></span>
+          </div>
+          <div class="flex justify-between text-slate-700">
+            <span>Mileage Adjustment:</span>
+            <span class="font-bold text-slate-900" x-text="trade.result.breakdown.mileage_adjustment"></span>
+          </div>
+          <div class="flex justify-between border-t border-slate-300 pt-2 font-bold text-slate-900">
+            <span>Your Trade-In:</span>
+            <span class="text-emerald-600 value-display">$<span x-text="Number(trade.result.trade_in_value).toLocaleString()"></span></span>
           </div>
         </div>
       </div>
     </template>
 
     <template x-if="tradeError">
-      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div class="bg-red-50 border-2 border-red-200 rounded-lg p-4 mt-4">
         <p class="text-sm text-red-700 font-semibold" x-text="tradeError"></p>
       </div>
     </template>
   </div>
 
   <!-- INVENTORY INTEL TAB -->
-  <div x-show="tab==='inventory'" class="bg-white rounded-xl p-4 sm:p-6 shadow-md space-y-4">
-    <h2 class="text-lg sm:text-xl font-bold text-slate-800">Inventory Intel</h2>
-    <p class="text-xs sm:text-sm text-slate-500">Quick vehicle lookup</p>
+  <div x-show="tab==='inventory'" class="card p-6 space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-slate-900">Inventory Intel</h2>
+      <p class="text-sm text-slate-500 mt-1">Find the perfect vehicle for your customer</p>
+    </div>
 
-    <div class="space-y-3">
+    <div class="space-y-4">
       <div>
-        <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">Search</label>
-        <input type="text" x-model="inventory.search" placeholder="Model, trim, color..." class="w-full px-4 py-3 border border-slate-300 rounded-lg text-base">
+        <label class="block text-sm font-semibold text-slate-800 mb-2">Search Inventory</label>
+        <input type="text" x-model="inventory.search" placeholder="Model, trim, color, stock#..." class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100" @keydown.enter="searchInventory()">
       </div>
-      <button @click="searchInventory()" :disabled="invLoading" class="w-full bg-blue-600 text-white font-bold py-4 sm:py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 active:scale-95">
-        <span x-show="!invLoading">Search Inventory</span>
-        <span x-show="invLoading">Searching…</span>
+      <button @click="searchInventory()" :disabled="invLoading" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 active:scale-95 shadow-lg hover:shadow-xl">
+        <span x-show="!invLoading">🔍 Search</span>
+        <span x-show="invLoading" class="inline-block animate-pulse-soft">Searching…</span>
       </button>
     </div>
 
     <template x-if="inventory.results && inventory.results.length > 0">
-      <div class="space-y-2">
-        <p class="text-xs sm:text-sm font-bold text-slate-700" x-text="inventory.results.length + ' found'"></p>
-        <template x-for="v in inventory.results" :key="v.vin">
-          <div class="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition active:scale-95 cursor-pointer">
-            <div class="flex items-start justify-between gap-2">
-              <div class="flex-1 min-w-0">
-                <p class="font-semibold text-xs sm:text-sm text-slate-800 line-clamp-1" x-text="v.year + ' ' + v.make + ' ' + v.model + (v.trim ? ' ' + v.trim : '')"></p>
-                <p class="text-xs text-slate-500 line-clamp-1" x-text="(v.mileage ? (Number(v.mileage)/1000).toFixed(0)+'K mi' : '—') + (v.exterior_color ? ' · ' + v.exterior_color : '')"></p>
+      <div class="space-y-3 pt-2 border-t border-slate-200">
+        <p class="text-sm font-bold text-slate-900" x-text="inventory.results.length + ' vehicle' + (inventory.results.length !== 1 ? 's' : '') + ' found'"></p>
+        <div class="max-h-[600px] overflow-y-auto space-y-2 pr-2">
+          <template x-for="v in inventory.results" :key="v.vin">
+            <div class="card p-4 hover:shadow-md transition cursor-pointer">
+              <div class="flex items-start justify-between gap-3 mb-3">
+                <div class="flex-1 min-w-0">
+                  <p class="font-bold text-sm text-slate-900 line-clamp-1" x-text="v.year + ' ' + v.make + ' ' + v.model"></p>
+                  <p class="text-sm text-slate-700 mt-0.5 line-clamp-1" x-text="(v.trim ? v.trim + ' · ' : '') + (v.exterior_color ? v.exterior_color + ' · ' : '') + (v.stock_number ? '#' + v.stock_number : '')"></p>
+                </div>
+                <div class="text-right shrink-0">
+                  <p class="text-lg font-bold text-emerald-600 value-display">$<span x-text="(Number(v.effective_price || v.price_dollars)/1000).toFixed(0)"></span>K</p>
+                </div>
               </div>
-              <div class="text-right shrink-0">
-                <p class="font-bold text-emerald-700 text-base sm:text-lg">$<span x-text="(Number(v.effective_price || v.price_dollars)/1000).toFixed(0)+'K'"></span></p>
-                <p class="text-xs text-slate-400" x-text="'Day ' + (v.days_on_lot || 0)"></p>
+              <div class="grid grid-cols-3 gap-2 text-xs text-slate-600">
+                <div>
+                  <p class="text-slate-600 mb-1">Mileage</p>
+                  <p class="font-semibold text-slate-900" x-text="v.mileage ? (Number(v.mileage)/1000).toFixed(0)+'K' : '—'"></p>
+                </div>
+                <div>
+                  <p class="text-slate-600 mb-1">Days On Lot</p>
+                  <p class="font-semibold text-slate-900" :class="v.days_on_lot && v.days_on_lot > 60 ? 'text-orange-600' : ''" x-text="(v.days_on_lot || 0) + ' days'"></p>
+                </div>
+                <div>
+                  <p class="text-slate-600 mb-1">FB Clicks</p>
+                  <p class="font-semibold text-slate-900 value-display" x-text="(v.fb_clicks || 0).toLocaleString()"></p>
+                </div>
               </div>
             </div>
-          </div>
-        </template>
+          </template>
+        </div>
       </div>
     </template>
 
     <template x-if="inventory.searched && (!inventory.results || inventory.results.length === 0)">
-      <div class="text-center py-6 text-slate-400 text-xs sm:text-sm">
-        No vehicles found
+      <div class="text-center py-8 text-slate-400">
+        <p class="text-lg mb-2">No vehicles found</p>
+        <p class="text-xs">Try a different search term</p>
       </div>
     </template>
   </div>
@@ -515,6 +753,7 @@ function salesmanTools() {
     tab: 'commission',
     username: 'Salesman',
 
+    // Commission calculator
     commission: {
       basePrice: 28500,
       addendum: 1995,
@@ -524,6 +763,7 @@ function salesmanTools() {
       result: null,
     },
 
+    // Payment estimator
     payment: {
       price: 28500,
       downPayment: 3000,
@@ -533,8 +773,9 @@ function salesmanTools() {
       result: null,
     },
 
+    // Beat them
     beatThem: {
-      year: 2023,
+      year: new Date().getFullYear(),
       make: 'INFINITI',
       model: 'Q5',
       trim: '',
@@ -544,6 +785,7 @@ function salesmanTools() {
     beatThemLoading: false,
     beatThemError: '',
 
+    // Deal killer
     killer: {
       vin: '',
       result: null,
@@ -551,8 +793,9 @@ function salesmanTools() {
     killerLoading: false,
     killerError: '',
 
+    // Trade-in estimator
     trade: {
-      year: 2019,
+      year: new Date().getFullYear() - 5,
       make: 'Honda',
       model: 'Civic',
       miles: 75000,
@@ -562,6 +805,7 @@ function salesmanTools() {
     tradeLoading: false,
     tradeError: '',
 
+    // Inventory
     inventory: {
       search: '',
       results: [],
@@ -570,54 +814,70 @@ function salesmanTools() {
     invLoading: false,
 
     async init() {
-      const me = await fetch('/api/me').then(r => r.json()).catch(() => ({}));
-      this.username = me.username || 'Salesman';
+      try {
+        const me = await fetch('/api/me').then(r => r.json()).catch(() => ({}));
+        this.username = me.username || 'Salesman';
+      } catch (e) {
+        // Silent fail
+      }
     },
 
     async calculateCommission() {
-      const resp = await fetch(
-        `/api/salesman/commission?` +
-        `base_price=${this.commission.basePrice}&` +
-        `addendum=${this.commission.addendum}&` +
-        `cost=${this.commission.cost}&` +
-        `pack=${this.commission.pack}&` +
-        `trade_in_value=${this.commission.tradeIn}`
-      );
-      const data = await resp.json();
-      this.commission.result = data;
-      // Add margin calc
-      this.commission.result.margin_pct = (data.gross / (data.base_price + data.addendum)) * 100;
+      try {
+        const resp = await fetch(
+          `/api/salesman/commission?` +
+          `base_price=${this.commission.basePrice}&` +
+          `addendum=${this.commission.addendum}&` +
+          `cost=${this.commission.cost}&` +
+          `pack=${this.commission.pack}&` +
+          `trade_in_value=${this.commission.tradeIn}`
+        );
+        if (!resp.ok) throw new Error('Failed to calculate');
+        const data = await resp.json();
+        this.commission.result = data;
+        this.commission.result.margin_pct = (data.gross / (data.base_price + data.addendum)) * 100;
+      } catch (e) {
+        console.error(e);
+      }
     },
 
     async calculatePayment() {
-      const resp = await fetch(
-        `/api/salesman/payment-estimate?` +
-        `vehicle_price=${this.payment.price}&` +
-        `down_payment=${this.payment.downPayment}&` +
-        `apr=${this.payment.apr}&` +
-        `term_months=${this.payment.months}&` +
-        `doc_fee=${this.payment.docFee}`
-      );
-      const data = await resp.json();
-      this.payment.result = data;
+      try {
+        const resp = await fetch(
+          `/api/salesman/payment-estimate?` +
+          `vehicle_price=${this.payment.price}&` +
+          `down_payment=${this.payment.downPayment}&` +
+          `apr=${this.payment.apr}&` +
+          `term_months=${this.payment.months}&` +
+          `doc_fee=${this.payment.docFee}`
+        );
+        if (!resp.ok) throw new Error('Failed to calculate');
+        const data = await resp.json();
+        this.payment.result = data;
+      } catch (e) {
+        console.error(e);
+      }
     },
 
     async getKillerData() {
-      if (!this.killer.vin.trim()) return alert('Enter a VIN');
+      const vin = (this.killer.vin || '').trim();
+      if (!vin) return;
       this.killerLoading = true;
       this.killerError = '';
       try {
-        const resp = await fetch(`/api/salesman/deal-killer/${encodeURIComponent(this.killer.vin)}`);
+        const resp = await fetch(`/api/salesman/deal-killer/${encodeURIComponent(vin)}`);
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.detail || 'Error');
+        if (!resp.ok) throw new Error(data.detail || 'Failed to get data');
         this.killer.result = data;
       } catch (e) {
-        this.killerError = e.message;
+        this.killerError = e.message || 'Error fetching data';
+      } finally {
+        this.killerLoading = false;
       }
-      this.killerLoading = false;
     },
 
     async estimateTradeIn() {
+      if (!this.trade.year || !this.trade.make || !this.trade.model) return;
       this.tradeLoading = true;
       this.tradeError = '';
       try {
@@ -628,17 +888,18 @@ function salesmanTools() {
             year: this.trade.year,
             make: this.trade.make,
             model: this.trade.model,
-            miles: this.trade.miles,
-            condition: this.trade.condition,
+            miles: this.trade.miles || 0,
+            condition: this.trade.condition || 'average',
           }),
         });
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.detail || 'Error');
+        if (!resp.ok) throw new Error(data.detail || 'Failed to estimate');
         this.trade.result = data;
       } catch (e) {
-        this.tradeError = e.message;
+        this.tradeError = e.message || 'Error estimating trade-in';
+      } finally {
+        this.tradeLoading = false;
       }
-      this.tradeLoading = false;
     },
 
     async searchInventory() {
@@ -650,30 +911,28 @@ function salesmanTools() {
         this.inventory.results = data.vehicles || [];
       } catch (e) {
         this.inventory.results = [];
+      } finally {
+        this.invLoading = false;
       }
-      this.invLoading = false;
     },
 
     async findCompetitors() {
-      if (!this.beatThem.year || !this.beatThem.make || !this.beatThem.model) {
-        alert('Enter year, make, and model');
-        return;
-      }
+      if (!this.beatThem.year || !this.beatThem.make || !this.beatThem.model) return;
       this.beatThemLoading = true;
       this.beatThemError = '';
       try {
         let url = `/api/salesman/beat-them?year=${this.beatThem.year}&make=${encodeURIComponent(this.beatThem.make)}&model=${encodeURIComponent(this.beatThem.model)}`;
         if (this.beatThem.trim) url += `&trim=${encodeURIComponent(this.beatThem.trim)}`;
         if (this.beatThem.ourVin) url += `&our_vin=${encodeURIComponent(this.beatThem.ourVin)}`;
-
         const resp = await fetch(url);
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.detail || 'Error');
+        if (!resp.ok) throw new Error(data.detail || 'Failed to search');
         this.beatThem.results = data;
       } catch (e) {
-        this.beatThemError = e.message;
+        this.beatThemError = e.message || 'Error searching competitors';
+      } finally {
+        this.beatThemLoading = false;
       }
-      this.beatThemLoading = false;
     },
   };
 }
