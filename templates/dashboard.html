@@ -2726,8 +2726,7 @@ body{font-family:Arial,system-ui,sans-serif;background:#fff;color:#0f172a;}
     <div class="hd-left"><h1>Grubbs INFINITI</h1><p>Pricing Worksheet</p></div>
     <div class="hd-right"><div class="badge">Mock Pencil</div><div class="date">${dateStr}</div></div>
   </div>
-  <div class="veh">
-    <div class="veh-img">${imgUrl ? `<img src="${imgUrl}" alt="${fullLabel}" style="display:block;"/>` : '<div style="background:#e2e8f0;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:11px;font-weight:600;">No Image</div>'}</div>
+  <div class="veh" style="grid-template-columns:1fr;padding:16px 20px;">
     <div class="veh-info">
       <div class="veh-name">${fullLabel}</div>
       <div class="veh-sub">Stock #${stock} · ${vin}${this.pencilCustomerName ? ' · ' + this.pencilCustomerName : ''}</div>
@@ -2773,17 +2772,17 @@ body{font-family:Arial,system-ui,sans-serif;background:#fff;color:#0f172a;}
 
       const container = document.createElement('div')
       container.innerHTML = worksheetHTML
-      container.style.cssText = 'position:relative;width:820px;background:#f1f5f9;'
+      container.style.cssText = 'position:relative;width:820px;background:#fff;'
       document.body.appendChild(container)
 
       try {
         await new Promise(resolve => setTimeout(resolve, 100))
         await html2pdf().set({
-          margin:     [8, 8, 8, 8],
+          margin:     [5, 5, 5, 5],
           filename:   `pencil-${(stock !== 'N/A' ? stock : vin).replace(/[^a-z0-9-]/gi, '_')}.pdf`,
           image:      { type: 'jpeg', quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#f1f5f9' },
-          jsPDF:      { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          html2canvas: { scale: 1.5, useCORS: true, logging: false, backgroundColor: '#fff', allowTaint: true },
+          jsPDF:      { unit: 'mm', format: 'letter', orientation: 'portrait' },
         }).from(container).save()
       } catch(e) {
         console.error('PDF generation error:', e)
