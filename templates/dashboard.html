@@ -2685,37 +2685,41 @@ function dashboard() {
       const worksheetHTML = `
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:Arial,system-ui,sans-serif;background:#f1f5f9;color:#0f172a;}
-.page{max-width:780px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;}
-.hd{background:#0f172a;padding:28px 32px;display:flex;align-items:center;justify-content:space-between;}
-.hd-left h1{font-size:20px;font-weight:800;color:#fff;}
-.hd-left p{font-size:12px;color:#94a3b8;margin-top:4px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;}
+body{font-family:Arial,system-ui,sans-serif;background:#fff;color:#0f172a;}
+.page{background:#fff;width:8.5in;height:11in;margin:0;padding:0;display:flex;flex-direction:column;}
+.hd{background:#0f172a;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.hd-left h1{font-size:18px;font-weight:800;color:#fff;margin:0;}
+.hd-left p{font-size:10px;color:#94a3b8;margin:2px 0 0 0;font-weight:500;text-transform:uppercase;}
 .hd-right{text-align:right;}
-.hd-right .badge{display:inline-block;background:#1877F2;color:#fff;font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;letter-spacing:.04em;text-transform:uppercase;}
-.hd-right .date{font-size:11px;color:#64748b;margin-top:6px;}
-.veh{display:flex;align-items:stretch;border-bottom:1px solid #e2e8f0;}
-.veh-img{width:220px;min-height:140px;flex-shrink:0;overflow:hidden;background:#f8fafc;}
+.hd-right .badge{display:inline-block;background:#1877F2;color:#fff;font-size:9px;font-weight:700;padding:4px 10px;border-radius:12px;text-transform:uppercase;}
+.hd-right .date{font-size:9px;color:#64748b;margin-top:4px;}
+.veh{display:grid;grid-template-columns:160px 1fr;gap:12px;padding:12px 20px;border-bottom:1px solid #e2e8f0;flex-shrink:0;}
+.veh-img{width:160px;height:100px;flex-shrink:0;background:#f8fafc;border-radius:6px;overflow:hidden;}
 .veh-img img{width:100%;height:100%;object-fit:cover;display:block;}
-.veh-info{flex:1;padding:20px 24px;display:flex;flex-direction:column;justify-content:center;gap:6px;}
-.veh-name{font-size:18px;font-weight:800;color:#0f172a;line-height:1.2;}
-.veh-sub{font-size:12px;color:#64748b;font-weight:500;}
-.veh-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
-.pill{background:#f1f5f9;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;color:#475569;}
-.body{padding:28px 32px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}
-.section-title{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;}
-.price-table{width:100%;border-collapse:collapse;}
-.price-table tr td{padding:9px 0;font-size:13px;border-bottom:1px solid #f1f5f9;}
+.veh-info{display:flex;flex-direction:column;justify-content:center;gap:4px;}
+.veh-name{font-size:14px;font-weight:800;color:#0f172a;line-height:1.2;}
+.veh-sub{font-size:10px;color:#64748b;font-weight:500;}
+.veh-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;}
+.pill{background:#f1f5f9;border-radius:4px;padding:2px 8px;font-size:9px;font-weight:600;color:#475569;}
+.body{padding:12px 20px;flex:1;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.section-title{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px;}
+.price-table{width:100%;border-collapse:collapse;font-size:11px;}
+.price-table tr td{padding:6px 0;border-bottom:1px solid #e2e8f0;}
 .price-table tr:last-child td{border-bottom:none;}
 .price-table .lbl{color:#475569;font-weight:500;}
 .price-table .amt{text-align:right;font-weight:600;color:#0f172a;}
-.price-table .otd td{padding-top:13px;font-size:15px;font-weight:800;color:#0f172a;border-top:2px solid #e2e8f0;border-bottom:none;}
-.price-table .down td{font-size:12px;color:#64748b;font-weight:500;}
-.price-table .fin td{font-size:14px;font-weight:700;color:#1877F2;}
-.payments-wrap{display:flex;flex-direction:column;gap:12px;}
-.apr-note{font-size:11px;color:#94a3b8;font-weight:500;text-align:center;}
-.sigs{padding:0 32px 28px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}
-.sig-line{border-top:1px solid #cbd5e1;padding-top:8px;font-size:11px;color:#94a3b8;font-weight:500;}
-.foot{background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;line-height:1.6;}
+.price-table .otd td{padding:8px 0;font-size:12px;font-weight:800;color:#0f172a;border-top:2px solid #94a3b8;border-bottom:none;}
+.price-table .fin td{font-size:11px;font-weight:700;color:#1877F2;}
+.payments-wrap{display:flex;flex-direction:column;gap:8px;}
+.pmt-table{width:100%;border-collapse:separate;border-spacing:3px;font-size:10px;}
+.pmt-table td{padding:8px 6px;text-align:center;background:#f1f5f9;border-radius:4px;}
+.pmt-table td.active{background:#1877F2;color:#fff;font-weight:700;}
+.pmt-table .label{font-size:8px;font-weight:600;text-transform:uppercase;color:inherit;}
+.pmt-table .amount{font-size:14px;font-weight:800;color:inherit;line-height:1;}
+.apr-note{font-size:9px;color:#94a3b8;font-weight:500;text-align:center;margin-top:4px;}
+.sigs{padding:0 20px 8px;display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-shrink:0;}
+.sig-line{border-top:1px solid #cbd5e1;padding-top:4px;font-size:9px;color:#94a3b8;font-weight:500;min-height:24px;}
+.foot{background:#f8fafc;padding:8px 20px;border-top:1px solid #e2e8f0;font-size:8px;color:#94a3b8;line-height:1.4;flex-shrink:0;}
 </style>
 <div class="page">
   <div class="hd">
@@ -2723,10 +2727,10 @@ body{font-family:Arial,system-ui,sans-serif;background:#f1f5f9;color:#0f172a;}
     <div class="hd-right"><div class="badge">Mock Pencil</div><div class="date">${dateStr}</div></div>
   </div>
   <div class="veh">
-    <div class="veh-img"></div>
+    <div class="veh-img">${imgUrl ? `<img src="${imgUrl}" alt="${fullLabel}" style="display:block;"/>` : '<div style="background:#e2e8f0;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:11px;font-weight:600;">No Image</div>'}</div>
     <div class="veh-info">
       <div class="veh-name">${fullLabel}</div>
-      <div class="veh-sub">Stock #${stock} &nbsp;·&nbsp; ${vin}${this.pencilCustomerName ? ' &nbsp;·&nbsp; ' + this.pencilCustomerName : ''}</div>
+      <div class="veh-sub">Stock #${stock} · ${vin}${this.pencilCustomerName ? ' · ' + this.pencilCustomerName : ''}</div>
       <div class="veh-meta">
         ${mileage !== '—' ? `<span class="pill">${mileage}</span>` : ''}
         ${color !== '—' ? `<span class="pill">${color}</span>` : ''}
@@ -2740,26 +2744,31 @@ body{font-family:Arial,system-ui,sans-serif;background:#f1f5f9;color:#0f172a;}
       <table class="price-table">
         <tr><td class="lbl">Internet Price</td><td class="amt">${fmt(basePrice)}</td></tr>
         ${addendum > 0 ? `<tr><td class="lbl">${addendumLabel}</td><td class="amt">${fmt(addendum)}</td></tr>` : ''}
-        <tr><td class="lbl">${taxLabel} (${Number(this.mockPencil.taxRate||0).toFixed(2)}%)</td><td class="amt">${fmt(taxAmount)}</td></tr>
+        <tr><td class="lbl">${taxLabel}</td><td class="amt">${fmt(taxAmount)}</td></tr>
         ${docFee > 0 ? `<tr><td class="lbl">${docFeeLabel}</td><td class="amt">${fmt(docFee)}</td></tr>` : ''}
         <tr class="otd"><td>Out-the-Door</td><td style="text-align:right">${fmt(outTheDoor)}</td></tr>
-        ${downPayment > 0 ? `<tr class="down"><td>Down Payment</td><td style="text-align:right">− ${fmt(downPayment)}</td></tr>` : ''}
+        ${downPayment > 0 ? `<tr class="fin"><td>Down Payment</td><td style="text-align:right">− ${fmt(downPayment)}</td></tr>` : ''}
         ${downPayment > 0 ? `<tr class="fin"><td>Amount Financed</td><td style="text-align:right">${fmt(amountFinanced)}</td></tr>` : ''}
       </table>
     </div>
     <div class="payments-wrap">
-      <div class="section-title">Monthly Payment Options</div>
-      <table style="width:100%;border-collapse:separate;border-spacing:6px;">
-        <tr>${pmtCols}</tr>
+      <div class="section-title">Monthly Payment</div>
+      <table class="pmt-table">
+        <tr>
+          <td><div class="label">48 mo</div><div class="amount">${fmtD(calcPmt(amountFinanced, apr, 48))}</div></td>
+          <td><div class="label">60 mo</div><div class="amount">${fmtD(calcPmt(amountFinanced, apr, 60))}</div></td>
+          <td class="active"><div class="label">72 mo</div><div class="amount">${fmtD(calcPmt(amountFinanced, apr, 72))}</div></td>
+          <td><div class="label">84 mo</div><div class="amount">${fmtD(calcPmt(amountFinanced, apr, 84))}</div></td>
+        </tr>
       </table>
-      <div class="apr-note">${Number(apr).toFixed(2)}% APR · Based on ${fmt(amountFinanced)} financed${downPayment > 0 ? ` · ${fmt(downPayment)} down` : ''}</div>
+      <div class="apr-note">${Number(apr).toFixed(2)}% APR</div>
     </div>
   </div>
   <div class="sigs">
-    <div><div class="sig-line">Customer Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>
-    <div><div class="sig-line">Sales Associate &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>
+    <div><div class="sig-line">Customer Signature __________________ Date ___</div></div>
+    <div><div class="sig-line">Sales Associate __________________ Date ___</div></div>
   </div>
-  <div class="foot">This worksheet is an estimate only and does not constitute a contract or commitment. Pricing, taxes, fees, and payment amounts are subject to change and contingent upon credit approval, final tax and title calculations, lender participation, and vehicle availability at time of delivery. All payments based on the APR and term shown. Actual rate may vary based on credit profile.</div>
+  <div class="foot">This worksheet is an estimate only and does not constitute a contract or commitment. All amounts subject to final approval, taxes, title, and lender terms.</div>
 </div>`
 
       const container = document.createElement('div')
