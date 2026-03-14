@@ -2664,16 +2664,31 @@ body{font-family:Arial,system-ui,sans-serif;background:#f1f5f9;color:#0f172a;}
       container.style.cssText = 'position:absolute;left:-9999px;top:0;width:820px;background:#f1f5f9;'
       document.body.appendChild(container)
 
+      // Wait for images to load before generating PDF
+      const imgs = container.querySelectorAll('img')
+      const imageLoadPromises = Array.from(imgs).map(img => {
+        return new Promise((resolve) => {
+          if (img.complete) {
+            resolve()
+          } else {
+            img.onload = resolve
+            img.onerror = resolve // resolve even if image fails to load
+          }
+        })
+      })
+      await Promise.all(imageLoadPromises)
+
       const filename = `pencil-${(stock !== 'N/A' ? stock : vin).replace(/[^a-z0-9-]/gi, '_')}.pdf`
       try {
         await html2pdf().from(container).set({
           margin:     [8, 8, 8, 8],
           filename,
           image:      { type: 'jpeg', quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
+          html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true },
           jsPDF:      { unit: 'mm', format: 'a4', orientation: 'portrait' },
         }).save()
       } catch(e) {
+        console.error('PDF generation failed:', e)
         alert('PDF generation failed. Try the browser print dialog instead (Ctrl+P).')
       } finally {
         document.body.removeChild(container)
